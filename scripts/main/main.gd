@@ -67,5 +67,5 @@ func _save_if_playing() -> void:
 
 func _make_theme() -> Theme:
 	var th := Theme.new()
-	th.default_font_size = 24
+	th.default_font_size = 26
 	return th

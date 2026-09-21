@@ -68,7 +68,7 @@ static func intro_page(idx: int) -> String:
 	var next_idx := idx + 1
 	var next_event := "story:%d" % next_idx if next_idx < pages.size() else "story:99"
 	var lines: Array[String] = []
-	lines.append("[font_size=24]%s[/font_size]" % esc(String(page.get("text", ""))))
+	lines.append("[font_size=26]%s[/font_size]" % esc(String(page.get("text", ""))))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link(next_event, String(page.get("link", "继续"))))
 	return join_lines(lines)

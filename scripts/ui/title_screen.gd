@@ -24,14 +24,14 @@ func _ready() -> void:
 func _build_ui() -> void:
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 40)
-	margin.add_theme_constant_override("margin_bottom", 32)
+	margin.add_theme_constant_override("margin_left", 36)
+	margin.add_theme_constant_override("margin_right", 36)
+	margin.add_theme_constant_override("margin_top", 52)
+	margin.add_theme_constant_override("margin_bottom", 40)
 	add_child(margin)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 16)
+	vbox.add_theme_constant_override("separation", 20)
 	margin.add_child(vbox)
 
 	# 名字输入行放在页面区上方：不依赖窗口高度，也不会被移动端软键盘遮住
@@ -47,7 +47,7 @@ func _build_ui() -> void:
 	_name_edit = LineEdit.new()
 	_name_edit.placeholder_text = "请输入创建角色名"
 	_name_edit.max_length = 12
-	_name_edit.custom_minimum_size = Vector2(0, 48)
+	_name_edit.custom_minimum_size = Vector2(0, 56)
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_name_edit.add_theme_color_override("font_placeholder_color", Color(0.72, 0.72, 0.72))
 	_input_row.add_child(_name_edit)

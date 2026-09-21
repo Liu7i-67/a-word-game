@@ -38,19 +38,19 @@ func _ready() -> void:
 func _build_ui() -> void:
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_top", 16)
-	margin.add_theme_constant_override("margin_bottom", 20)
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_bottom", 28)
 	add_child(margin)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 12)
+	vbox.add_theme_constant_override("separation", 18)
 	margin.add_child(vbox)
 
 	# 顶栏：昵称 · 体力条 · 铜贝
 	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 12)
+	top.add_theme_constant_override("separation", 14)
 	vbox.add_child(top)
 
 	_name_label = Label.new()
@@ -59,7 +59,7 @@ func _build_ui() -> void:
 
 	_hp_bar = ProgressBar.new()
 	_hp_bar.show_percentage = false
-	_hp_bar.custom_minimum_size = Vector2(0, 36)
+	_hp_bar.custom_minimum_size = Vector2(0, 46)
 	_hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(_hp_bar)
@@ -69,7 +69,7 @@ func _build_ui() -> void:
 	_hp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hp_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_hp_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hp_text.add_theme_font_size_override("font_size", 20)
+	_hp_text.add_theme_font_size_override("font_size", 23)
 	_hp_bar.add_child(_hp_text)
 
 	_copper_label = Label.new()
@@ -78,16 +78,18 @@ func _build_ui() -> void:
 
 	# 导航按钮行
 	var nav := HBoxContainer.new()
-	nav.add_theme_constant_override("separation", 12)
+	nav.add_theme_constant_override("separation", 14)
 	vbox.add_child(nav)
 	for label: String in MENU_EVENTS:
 		var btn := Button.new()
 		btn.text = label
+		btn.custom_minimum_size = Vector2(0, 58)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.pressed.connect(_on_menu.bind(MENU_EVENTS[label]))
 		nav.add_child(btn)
 	var save_btn := Button.new()
 	save_btn.text = "存档"
+	save_btn.custom_minimum_size = Vector2(0, 58)
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_btn.pressed.connect(_on_manual_save)
 	nav.add_child(save_btn)

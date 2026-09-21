@@ -16,9 +16,10 @@ func _init() -> void:
 	context_menu_enabled = false
 	focus_mode = Control.FOCUS_NONE
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	add_theme_font_size_override("normal_font_size", 23)
-	add_theme_font_size_override("bold_font_size", 25)
-	add_theme_font_size_override("italics_font_size", 23)
+	add_theme_font_size_override("normal_font_size", 26)
+	add_theme_font_size_override("bold_font_size", 29)
+	add_theme_font_size_override("italics_font_size", 26)
+	add_theme_constant_override("line_separation", 10)
 	meta_clicked.connect(_on_meta_clicked)
 
 
