@@ -124,6 +124,17 @@ if ($newCode -ne $curCode -or $newName -ne $curName) {
     Write-Host "版本号不变：$curName ($curCode)" -ForegroundColor Cyan
 }
 
+# 同步版本号到 project.godot：游戏内「检查更新」读取 config/version 与 GitHub Release 比对
+$projFile = Join-Path $root 'project.godot'
+$projContent = [System.IO.File]::ReadAllText($projFile)
+$newProjContent = [regex]::Replace($projContent, '(?m)^config/version="[^"]*"', "config/version=`"$newName`"")
+if ($newProjContent -eq $projContent) {
+    Write-Host "警告：project.godot 未找到 config/version，游戏内检查更新将读不到本地版本" -ForegroundColor Yellow
+} else {
+    [System.IO.File]::WriteAllText($projFile, $newProjContent)
+    Write-Host "已同步 config/version=$newName -> project.godot" -ForegroundColor DarkGray
+}
+
 # ---------- 4. 定位 Godot ----------
 $godot = Find-Godot $GodotPath
 if (-not $godot) {

@@ -420,6 +420,29 @@
       "price": 12000,
       "stack": 1,
       "forge": {"materials": {"shanzei_lingpai": 1, "xuantie": 3}, "copper": 6000}
+    },
+    "xiaodao": {
+      "name": "小刀",
+      "type": "equip",
+      "desc": "福利官私下塞给你的一把小刀，刀身毫不起眼，出手却快得吓人。",
+      "req_level": 1,
+      "quality": "普通",
+      "tradeable": false,
+      "weight": 1,
+      "atk": [100, 1000],
+      "durability": 300,
+      "price": 0,
+      "stack": 1
+    },
+    "shibeijingyandan": {
+      "name": "十倍经验获取加速丹",
+      "type": "drug",
+      "desc": "神秘丹药，服下后接下来 10 场战斗，战斗结束后的经验结算变为十倍。",
+      "weight": 0,
+      "stack": 99,
+      "price": 0,
+      "exp_buff": {"battles": 10, "multiplier": 10},
+      "tiers": []
     }
   }
 }

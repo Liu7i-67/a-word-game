@@ -29,6 +29,8 @@ func _process(_delta: float) -> bool:
 	_test_combat_drug(player)
 	_test_smith(player)
 	_test_dungeon(player)
+	_test_gm_easteregg(player)
+	_test_update_checker(player)
 	_test_trade_engine()
 	_test_trade_router(player)
 	_test_sell_equip(player)
@@ -107,8 +109,8 @@ func _test_data() -> void:
 			var atk: Array = def.get("atk", [])
 			check(atk.size() == 2 and int(atk[1]) >= int(atk[0]), "装备 %s 攻击区间非法" % iid)
 		if String(def.get("type", "")) == "drug":
-			check(int(def.get("heal", 0)) > 0, "药品 %s 缺 heal" % iid)
-			check(int(def.get("price", 0)) > 0, "药品 %s 缺 price" % iid)
+			check(int(def.get("heal", 0)) > 0 or def.has("exp_buff"), "药品 %s 缺 heal/exp_buff" % iid)
+			check(def.has("exp_buff") or int(def.get("price", 0)) > 0, "药品 %s 缺 price" % iid)
 		var forge: Dictionary = def.get("forge", {})
 		if not forge.is_empty():
 			var mats: Dictionary = forge.get("materials", {})
@@ -639,6 +641,157 @@ func _test_dungeon(player: PlayerCore) -> void:
 	bus.queue_free()
 
 
+# ---------- 5.7b GM 彩蛋（福利官暗号）+ 经验加速丹 ----------
+
+func _test_gm_easteregg(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("彩蛋员", "♂")
+
+	# 福利官页第二选项
+	router.handle("goto:fukleijyun")
+	router.handle("npc:fukleijyun:officer")
+	check(router.page.contains("welfare_claim"), "福利官页保留领福利")
+	check(router.page.contains("纵横四海") and router.page.contains("gm_password"), "福利官页新增纵横四海入口")
+
+	# 密码盘：数字追加、满 6 位截断、清空
+	router.handle("gm_password")
+	check(router.page.contains("gm_pwd:9") and router.page.contains("gm_pwd_ok"), "密码盘渲染数字键 + 确认")
+	for d in "1234567":
+		router.handle("gm_pwd:%s" % d)
+	check(router.gm_pwd == "123456", "密码输入满 6 位截断")
+	router.handle("gm_pwd:clear")
+	check(router.gm_pwd == "", "清空归零")
+
+	# 错误密码：无任何提示退回福利官，不发奖
+	var pill_id := Rules.gm_exp_pill()
+	var knife_id := Rules.gm_knife()
+	var pill0 := player.count_stack(pill_id)
+	var eq0 := player.equips.size()
+	router.handle("gm_password")
+	for d in "123456":
+		router.handle("gm_pwd:%s" % d)
+	router.handle("gm_pwd_ok")
+	check(player.count_stack(pill_id) == pill0 and player.equips.size() == eq0, "错误密码不发奖")
+	check(router.page.contains("领福利") and not router.page.contains("获得道具"), "错误密码无提示退回福利官")
+
+	# 没输满 6 位点确认：同样无提示退回
+	router.handle("gm_password")
+	for d in "123":
+		router.handle("gm_pwd:%s" % d)
+	router.handle("gm_pwd_ok")
+	check(player.count_stack(pill_id) == pill0, "未输满 6 位不发奖")
+
+	# 正确密码：加速丹×3 + 小刀×1
+	for d in Rules.gm_password():
+		router.handle("gm_pwd:%s" % d)
+	router.handle("gm_pwd_ok")
+	check(player.count_stack(pill_id) == pill0 + 3, "正确密码加速丹×3 入包")
+	check(player.equips.size() == eq0 + 1, "正确密码小刀入包")
+	check(router.page.contains("获得装备：小刀"), "领奖页显示小刀")
+	var knife_atk: Array = GameData.get_item(knife_id).get("atk", [])
+	check(knife_atk.size() == 2 and int(knife_atk[0]) == 100 and int(knife_atk[1]) == 1000
+		and int(GameData.get_item(knife_id).get("durability", 0)) == 300, "小刀攻击 100-1000 / 耐久 300")
+
+	# 可重复触发
+	router.handle("gm_password")
+	for d in Rules.gm_password():
+		router.handle("gm_pwd:%s" % d)
+	router.handle("gm_pwd_ok")
+	check(player.count_stack(pill_id) == pill0 + 6, "彩蛋可重复触发（丹再+3）")
+	check(player.equips.size() == eq0 + 2, "彩蛋可重复触发（小刀再+1）")
+
+	# 加速丹：药品页展示 + 使用 → 10 场 ×10
+	player.equip_hand(player.equips.size() - 1)
+	router.handle("items:drug")
+	check(router.page.contains("经验×10（10场）"), "药品页显示加速丹效果")
+	router.handle("use_drug:%s" % pill_id)
+	check(player.exp_buff_left == 10 and player.exp_buff_mult == 10, "服丹后 10 场 ×10")
+	check(player.count_stack(pill_id) == pill0 + 5, "服丹数量 -1")
+	router.handle("status")
+	check(router.page.contains("经验加速：×10（剩 10 场）"), "状态页显示加速 buff")
+
+	# 战斗胜利：经验 ×10 结算并消耗 1 场次
+	player.rng.seed = 42
+	router.handle("goto:nungcoeng")
+	router.handle("fight:bingji")
+	var guarded := 0
+	while router.combat != null and not router.combat.finished and guarded < 200:
+		router.handle("attack")
+		guarded += 1
+	check(router.combat != null and router.combat.won, "加速丹战斗胜利")
+	check(router.combat.reward_exp % 10 == 0, "胜利经验 ×10 结算")
+	check(player.exp_buff_left == 9, "结算消耗 1 场次")
+	router.handle("combat_reward")
+	check(router.page.contains("经验加速丹生效"), "战利品页标注加速生效")
+	router.handle("combat_leave")
+
+	# 商店不卖加速丹，仍卖体力药
+	router.handle("goto:soengdim")
+	router.handle("npc:soengdim:merchant")
+	check(not router.page.contains("buy_drug:%s" % pill_id), "商店不卖加速丹")
+	check(router.page.contains("buy_drug:pingguo"), "商店仍卖体力药")
+
+	# 战斗中使用加速丹：怪物不还手
+	router.handle("goto:nungcoeng")
+	router.handle("fight:bingji")
+	check(router.combat != null, "进入战斗（战斗用丹用例）")
+	var hp_before := player.hp_cur
+	router.handle("combat_use:%s" % pill_id)
+	check(player.exp_buff_left == 10, "战斗中服丹重新激活至 10 场")
+	check(player.count_stack(pill_id) == pill0 + 4, "战斗中服丹数量 -1")
+	check(player.hp_cur == hp_before, "战斗中服丹怪物不还手")
+	player.add_copper(1000)
+	router.handle("retreat")
+	check(router.combat == null, "战斗用丹用例撤退清理")
+
+
+# ---------- 5.7c 检查更新（离线：只验页面与事件链路，不发真网络请求） ----------
+
+func _test_update_checker(player: PlayerCore) -> void:
+	# 版本比较
+	check(Rules.github_repo() != "", "config.update.repo 已配置")
+	check(not Rules.version_newer("1.0.1", "1.0.1"), "同版本不算更新")
+	check(not Rules.version_newer("1.0.1", "1.0.2"), "本地更新则不提示")
+	check(Rules.version_newer("1.0.2", "1.0.1"), "patch 段更新")
+	check(Rules.version_newer("1.1.0", "1.0.9"), "minor 段比较")
+	check(Rules.version_newer("v2.0", "1.9.9"), "tag 前缀 v 与缺省组件按 0")
+	check(Rules.version_newer("V10.0.0", "9.99.99"), "大版本数值比较（非字典序）")
+
+	var router := EventRouter.new()
+	var page_updates := [0]
+	router.page_changed.connect(func() -> void: page_updates[0] += 1)
+	router.setup(player, null)
+
+	# 标题页含检查更新入口
+	router.handle("story:-1")
+	check(router.page.contains("check_update") and router.page.contains("检查更新"), "标题页检查更新入口")
+
+	# 发起检查：进入检查页（update_check_requested 无监听也不报错）
+	router.handle("check_update")
+	check(router.page.contains("正在检查更新") and router.page.contains("back_title"), "检查中页面")
+
+	# 离线回填结果：新版本页
+	router.apply_update_result({
+		"ok": true, "version": "9.9.9", "notes": "更新日志：修了些bug",
+		"apk_url": "https://example.com/a-word-game-9.9.9.apk", "html_url": "https://example.com/release",
+	})
+	check(page_updates[0] == 1, "apply_update_result 广播 page_changed")
+	check(router.page.contains("发现新版本") and router.page.contains("update_download"), "新版本结果页 + 下载入口")
+	check(router.page.contains("更新日志：修了些bug"), "更新日志展示")
+
+	# 已是最新 / 失败可重试
+	router.apply_update_result({"ok": true, "version": "0.0.1"})
+	check(router.page.contains("已是最新版本"), "已是最新提示")
+	router.apply_update_result({"ok": false})
+	check(page_updates[0] == 3, "每次回填都广播 page_changed")
+	check(router.page.contains("检查更新失败") and router.page.contains("check_update"), "失败页可重试")
+
+	# 返回标题
+	router.handle("back_title")
+	check(router.page.contains("縱橫四海"), "返回标题页")
+
+
 # ---------- 5.8 掉落扩展 drop_equip（扩展契约 §4.6） ----------
 
 func _test_drop_equip(player: PlayerCore) -> void:
@@ -999,6 +1152,8 @@ func _test_player_roundtrip(player: PlayerCore) -> void:
 	player.dungeon_day = 12345
 	player.dungeon_kills = 7
 	player.dungeon_deadline = 999
+	player.exp_buff_left = 7
+	player.exp_buff_mult = 5
 	var save := {}
 	player.write_to(save)
 	var clone := PlayerCore.new()
@@ -1010,6 +1165,7 @@ func _test_player_roundtrip(player: PlayerCore) -> void:
 	check(clone.hand == 0 and clone.equips.size() == 1, "往返：装备")
 	check(clone.location == "zaugun", "往返：位置")
 	check(clone.dungeon_day == 12345 and clone.dungeon_kills == 7 and clone.dungeon_deadline == 999, "往返：地宫字段")
+	check(clone.exp_buff_left == 7 and clone.exp_buff_mult == 5, "往返：经验加速 buff")
 	var bad := clone.read_from({})
 	check(not bad, "空存档拒绝")
 
@@ -1019,10 +1175,13 @@ func _test_player_roundtrip(player: PlayerCore) -> void:
 	p.erase("dungeon_day")
 	p.erase("dungeon_kills")
 	p.erase("dungeon_deadline")
+	p.erase("exp_buff_left")
+	p.erase("exp_buff_mult")
 	var clone2 := PlayerCore.new()
 	root.add_child(clone2)
 	check(clone2.read_from(old_save), "旧档读取成功")
 	check(clone2.dungeon_day == -1 and clone2.dungeon_kills == 0 and clone2.dungeon_deadline == 0, "旧档地宫字段默认值")
+	check(clone2.exp_buff_left == 0 and clone2.exp_buff_mult == 10, "旧档加速 buff 默认值")
 	clone2.queue_free()
 
 

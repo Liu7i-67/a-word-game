@@ -50,6 +50,8 @@ static func intro_title(has_save: bool) -> String:
 	lines.append("[center]%s[/center]" % link("story:0", start_link))
 	if has_save:
 		lines.append("[center]%s[/center]" % link("continue", "继续冒险"))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("check_update", "检查更新"))
 	return join_lines(lines)
 
 
@@ -84,6 +86,44 @@ static func create_page(error_msg: String) -> String:
 	if error_msg != "":
 		lines.append("")
 		lines.append("[color=red]%s[/color]" % esc(error_msg))
+	return join_lines(lines)
+
+
+# ---------- 检查更新（标题页入口；请求经 UpdateChecker，结果由 EventRouter 回填） ----------
+
+static func update_checking_page() -> String:
+	var lines: Array[String] = []
+	lines.append(header("检查更新"))
+	lines.append("正在检查更新，请稍候……")
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_title", "返回标题"))
+	return join_lines(lines)
+
+
+## 更新检查结果页：失败可重试；新版展示更新日志并给下载入口（系统浏览器拉 APK）
+static func update_result_page(result: Dictionary, local_version: String) -> String:
+	var lines: Array[String] = []
+	lines.append(header("检查更新"))
+	var remote := String(result.get("version", "")).strip_edges().trim_prefix("v").trim_prefix("V")
+	if not bool(result.get("ok", false)) or remote == "":
+		lines.append("检查更新失败，可能是网络不太顺畅，稍后再试试。")
+		lines.append("")
+		lines.append("[center]%s[/center]" % link("check_update", "重试"))
+	elif Rules.version_newer(remote, local_version):
+		lines.append("发现新版本：[b]%s[/b]（当前 %s）" % [esc(remote), esc(local_version)])
+		var notes := String(result.get("notes", "")).replace("\r\n", "\n").replace("\r", "\n").strip_edges()
+		if notes != "":
+			lines.append("")
+			lines.append(dim(notes))
+		lines.append("")
+		if String(result.get("apk_url", "")) != "" or String(result.get("html_url", "")) != "":
+			lines.append("[center]%s[/center]" % link("update_download", "前往下载"))
+		else:
+			lines.append(dim("（本次发布未附带安装包，请到发布页查看。）"))
+	else:
+		lines.append("当前已是最新版本：%s。" % esc(local_version))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_title", "返回标题"))
 	return join_lines(lines)
 
 
@@ -162,6 +202,8 @@ static func status_page(player: PlayerCore) -> String:
 	lines.append("性别：%s" % player.gender)
 	lines.append("等级：%d" % player.level)
 	lines.append("经验：%d/%d" % [player.exp_cur, player.exp_need()])
+	if player.exp_buff_left > 0:
+		lines.append("[color=#ffd700]经验加速：×%d（剩 %d 场）[/color]" % [player.exp_buff_mult, player.exp_buff_left])
 	lines.append("体力：%d/%d" % [player.hp_cur, player.max_hp()])
 	lines.append("攻击：%d-%d" % [atk.x, atk.y])
 	lines.append("防御：%d" % player.defense())
@@ -221,8 +263,8 @@ static func items_page(player: PlayerCore, cat: String) -> String:
 				if String(def.get("type", "")) != "drug":
 					continue
 				any_drug = true
-				lines.append("%s ×%d 疗效+%d  %s" % [
-					esc(String(def.get("name", id))), int(player.bag[id]), int(def.get("heal", 0)),
+				lines.append("%s ×%d %s  %s" % [
+					esc(String(def.get("name", id))), int(player.bag[id]), drug_effect_text(def),
 					link("use_drug:%s" % id, "[使用]"),
 				])
 			if not any_drug:
@@ -331,6 +373,8 @@ static func reward_page(engine: CombatEngine, player: PlayerCore) -> String:
 	lines.append(header("战利品"))
 	lines.append("你体力：%d/%d" % [player.hp_cur, player.max_hp()])
 	lines.append("经验：+%d" % engine.reward_exp)
+	if engine.exp_mult > 1:
+		lines.append("[color=#ffd700]经验加速丹生效：经验×%d（剩 %d 场）[/color]" % [engine.exp_mult, player.exp_buff_left])
 	lines.append("贝钱：+%d" % engine.reward_copper)
 	if engine.level_gained > 0:
 		lines.append("[color=#ffd700]连升 %d 级！当前 %d 级。[/color]" % [engine.level_gained, player.level])
@@ -358,8 +402,8 @@ static func combat_drug_page(engine: CombatEngine, player: PlayerCore) -> String
 		if String(def.get("type", "")) != "drug":
 			continue
 		any = true
-		lines.append("%s ×%d 疗效+%d  %s" % [
-			esc(String(def.get("name", id))), int(player.bag[id]), int(def.get("heal", 0)),
+		lines.append("%s ×%d %s  %s" % [
+			esc(String(def.get("name", id))), int(player.bag[id]), drug_effect_text(def),
 			link("combat_use:%s" % id, "[服用]"),
 		])
 	if not any:
@@ -377,6 +421,14 @@ static func drug_result(player: PlayerCore, msg: String) -> String:
 	lines.append("")
 	lines.append("[center]%s   %s[/center]" % [link("items:drug", "返回"), link("back_game", "返回游戏")])
 	return join_lines(lines)
+
+
+## 药品效果文案：体力药=疗效+X；加速丹=经验×N（M场）
+static func drug_effect_text(def: Dictionary) -> String:
+	if def.has("exp_buff"):
+		var buff: Dictionary = def.get("exp_buff", {})
+		return "经验×%d（%d场）" % [int(buff.get("multiplier", 10)), int(buff.get("battles", 10))]
+	return "疗效+%d" % int(def.get("heal", 0))
 
 
 static func lose_page(engine: CombatEngine, lost_copper: int, revive_scene_name: String) -> String:
@@ -429,6 +481,48 @@ static func welfare_page(player: PlayerCore) -> String:
 		lines.append("[center]%s[/center]" % link("welfare_claim", "领福利"))
 	else:
 		lines.append("福利官：本周的福利你已经领过了，下周再来吧。")
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("gm_password", "纵横四海"))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+## GM 彩蛋密码盘：6 位密码框 + 9 个数字键（1-9）+ 清空/确认。
+## 密码错误的反馈由 EventRouter 处理（无任何提示），本页只管呈现。
+static func gm_password_page(entered: String) -> String:
+	var lines: Array[String] = []
+	lines.append(header("福利官"))
+	lines.append("福利官：（四下张望，压低声音）自己人才知道规矩——报上暗号，好东西自然有你的份。")
+	lines.append("")
+	var slots: Array[String] = []
+	for i in 6:
+		slots.append("●" if i < entered.length() else "＿")
+	lines.append("[center][b][font_size=40]%s[/font_size][/b][/center]" % " ".join(PackedStringArray(slots)))
+	lines.append(dim("（请输入 6 位数字密码）"))
+	lines.append("")
+	for row in 3:
+		var cells: Array[String] = []
+		for col in 3:
+			var d := row * 3 + col + 1
+			cells.append(link("gm_pwd:%d" % d, "%d" % d))
+		lines.append("[center]%s[/center]" % SEP.join(PackedStringArray(cells)))
+	lines.append("")
+	lines.append("[center]%s %s %s[/center]" % [link("gm_pwd:clear", "清空"), SEP, link("gm_pwd_ok", "确认")])
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+## GM 彩蛋领奖页：只展示实际到手的奖励（可重复触发）
+static func gm_reward_page(player: PlayerCore, pill_id: String, pill_count: int, knife_id: String) -> String:
+	var lines: Array[String] = []
+	lines.append(header("福利官"))
+	lines.append("福利官：暗号对上了！东西拿好，天知地知你知我知。")
+	if pill_count > 0:
+		lines.append("获得道具：%s ×%d" % [esc(player.item_name(pill_id)), pill_count])
+	if knife_id != "":
+		lines.append("获得装备：%s" % esc(player.item_name(knife_id)))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "返回"))
 	return join_lines(lines)
@@ -692,7 +786,8 @@ static func shop_page(player: PlayerCore) -> String:
 	lines.append("商人：远洋商队刚靠岸，这几样药剂最能救命。出门打怪，包里可不能缺了它们。")
 	for id: String in GameData.items:
 		var def := GameData.get_item(id)
-		if String(def.get("type", "")) != "drug":
+		# 商店只卖体力药；经验加速丹等特殊丹药不在售（heal 缺失即跳过）
+		if String(def.get("type", "")) != "drug" or int(def.get("heal", 0)) <= 0:
 			continue
 		var unit := int(def.get("price", int(def.get("buy_price", 0))))
 		lines.append("▉%s 疗效+%d %d铜贝/瓶" % [esc(String(def.get("name", id))), int(def.get("heal", 0)), unit])

@@ -154,3 +154,45 @@ static func dungeon_reward_copper() -> int:
 
 static func dungeon_reward_gold() -> int:
 	return int(section("combat").get("dungeon_reward_gold", 1))
+
+
+## ---------- GM 彩蛋（福利官暗号，数值在 config.gm） ----------
+
+static func gm_password() -> String:
+	return String(section("gm").get("password", "676767"))
+
+
+static func gm_exp_pill() -> String:
+	return String(section("gm").get("exp_pill", ""))
+
+
+static func gm_exp_pill_count() -> int:
+	return maxi(int(section("gm").get("exp_pill_count", 0)), 0)
+
+
+static func gm_knife() -> String:
+	return String(section("gm").get("knife", ""))
+
+
+## ---------- 检查更新（GitHub Release，数值在 config.update） ----------
+
+static func github_repo() -> String:
+	return String(section("update").get("repo", ""))
+
+
+## 远端版本是否新于本地版本：按 major.minor.patch 数值逐段比较，缺省段按 0
+static func version_newer(remote: String, local: String) -> bool:
+	var r := _version_tuple(remote)
+	var l := _version_tuple(local)
+	for i in 3:
+		if r[i] != l[i]:
+			return r[i] > l[i]
+	return false
+
+
+static func _version_tuple(v: String) -> Array[int]:
+	var out: Array[int] = [0, 0, 0]
+	var parts := v.strip_edges().trim_prefix("v").trim_prefix("V").split(".")
+	for i in mini(parts.size(), 3):
+		out[i] = maxi(String(parts[i]).to_int(), 0)
+	return out

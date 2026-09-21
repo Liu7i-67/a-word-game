@@ -5,6 +5,7 @@ extends Control
 var router: EventRouter
 var title_screen: TitleScreen
 var game_screen: GameScreen
+var update_checker: UpdateChecker
 var _tour: RefCounted = null
 
 
@@ -15,6 +16,10 @@ func _ready() -> void:
 	router.setup(PlayerState, EventBus)
 	router.game_started.connect(_on_game_started)
 	router.continue_requested.connect(_on_continue)
+	update_checker = UpdateChecker.new()
+	add_child(update_checker)
+	router.update_check_requested.connect(_on_update_check_requested)
+	update_checker.finished.connect(_on_update_result)
 	_show_title()
 	if OS.get_cmdline_user_args().has("--shot-tour"):
 		print("TOUR: 进入走查模式")
@@ -41,6 +46,15 @@ func _on_continue() -> void:
 		push_error("Main: 存档读取失败，留在标题页")
 		return
 	_start_game()
+
+
+## 检查更新链路：router 发请求信号 → UpdateChecker 查 GitHub → 结果回填 router
+func _on_update_check_requested() -> void:
+	update_checker.check(Rules.github_repo())
+
+
+func _on_update_result(result: Dictionary) -> void:
+	router.apply_update_result(result)
 
 
 func _start_game() -> void:

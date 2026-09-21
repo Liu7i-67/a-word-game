@@ -6,6 +6,8 @@ extends RefCounted
 
 signal game_started
 signal continue_requested
+signal update_check_requested
+signal page_changed
 
 var player: PlayerCore
 var bus: Variant = null
@@ -16,6 +18,13 @@ var needs_save := false
 
 var combat: CombatEngine = null
 var _combat_show_self := false
+
+## GM 彩蛋密码盘当前输入（仅 UI 会话内临时状态，不入存档）
+var gm_pwd := ""
+
+## 检查更新结果里的下载入口（update_download 事件用）
+var _update_apk_url := ""
+var _update_html_url := ""
 
 
 func setup(p_player: PlayerCore, p_bus: Variant = null) -> void:
@@ -39,6 +48,12 @@ func handle(event: String, param: String = "") -> void:
 			_story(arg)
 		"continue":
 			continue_requested.emit()
+		"check_update":
+			_check_update()
+		"update_download":
+			_update_download()
+		"back_title":
+			page = Pages.intro_title(_has_save())
 		"create":
 			_create(arg, param)
 		"goto":
@@ -59,6 +74,13 @@ func handle(event: String, param: String = "") -> void:
 			_equip_off(int(arg))
 		"welfare_claim":
 			_welfare_claim()
+		"gm_password":
+			gm_pwd = ""
+			page = Pages.gm_password_page(gm_pwd)
+		"gm_pwd":
+			_gm_pwd_input(arg)
+		"gm_pwd_ok":
+			_gm_pwd_ok()
 		"heal":
 			_heal()
 		"confess":
@@ -149,6 +171,29 @@ func handle(event: String, param: String = "") -> void:
 			_back_game()
 		_:
 			page = Pages.notice_page("这个入口暂时通向虚空……", "back_game", "返回游戏")
+
+
+# ---------- 检查更新（标题页入口；网络经 UpdateChecker，装配在 Main） ----------
+
+func _check_update() -> void:
+	page = Pages.update_checking_page()
+	update_check_requested.emit()
+
+
+## UpdateChecker 完成后由 Main 回填：渲染结果页并广播 page_changed 让界面重绘
+func apply_update_result(result: Dictionary) -> void:
+	_update_apk_url = String(result.get("apk_url", ""))
+	_update_html_url = String(result.get("html_url", ""))
+	var local := String(ProjectSettings.get_setting("application/config/version", "0.0.0"))
+	page = Pages.update_result_page(result, local)
+	page_changed.emit()
+
+
+## 前往下载：系统浏览器打开 APK 直链（无直链退回发布页）；页面保持不动
+func _update_download() -> void:
+	var url := _update_apk_url if _update_apk_url != "" else _update_html_url
+	if url != "":
+		OS.shell_open(url)
 
 
 # ---------- 开场 / 建号 ----------
@@ -366,6 +411,42 @@ func _welfare_claim() -> void:
 	needs_save = true
 	if bus != null:
 		bus.welfare_claimed.emit(amount)
+
+
+# ---------- GM 彩蛋（福利官暗号） ----------
+
+## 密码盘按键：数字追加（满 6 位忽略），clear 清空
+func _gm_pwd_input(key: String) -> void:
+	if key == "clear":
+		gm_pwd = ""
+	elif key.length() == 1 and key >= "1" and key <= "9" and gm_pwd.length() < 6:
+		gm_pwd += key
+	page = Pages.gm_password_page(gm_pwd)
+
+
+## 确认：密码正确发奖（可重复触发）；错误或没输满 6 位一律无提示退回福利官
+func _gm_pwd_ok() -> void:
+	var code := gm_pwd
+	gm_pwd = ""
+	if code != Rules.gm_password():
+		page = Pages.welfare_page(player)
+		return
+	var pill_id := Rules.gm_exp_pill()
+	var pill_count := Rules.gm_exp_pill_count()
+	if pill_id == "" or not GameData.has_item(pill_id) or not player.add_stack(pill_id, pill_count):
+		pill_count = 0
+	var knife_id := Rules.gm_knife()
+	var knife_given := ""
+	if knife_id != "" and GameData.has_item(knife_id):
+		if player.add_equip(knife_id) >= 0 or player.add_stack(knife_id, 1):
+			knife_given = knife_id
+	needs_save = true
+	page = Pages.gm_reward_page(player, pill_id, pill_count, knife_given)
+	if bus != null:
+		if pill_count > 0:
+			bus.item_obtained.emit(StringName(pill_id), pill_count)
+		if knife_given != "":
+			bus.item_obtained.emit(StringName(knife_id), 1)
 
 
 # ---------- 银行 ----------
@@ -603,12 +684,22 @@ func _use_drug(id: String) -> void:
 	match player.use_drug(id):
 		"":
 			needs_save = true
-			msg = "你服下了%s，体力恢复到 %d/%d，浑身是劲。" % [player.item_name(id), player.hp_cur, player.max_hp()]
+			msg = _drug_used_msg(id)
 		"full":
 			msg = "你现在体力充沛，不用吃药，留着救急吧。"
 		_:
 			msg = "你翻遍背包也没找到这种药。"
 	page = Pages.drug_result(player, msg)
+
+
+## 用药成功后的结果文案：加速丹报 buff 场次，体力药报恢复量
+func _drug_used_msg(id: String) -> String:
+	var def := GameData.get_item(id)
+	if def.has("exp_buff"):
+		var buff: Dictionary = def.get("exp_buff", {})
+		return "你服下了%s，接下来 %d 场战斗，战斗结束后的经验结算×%d。" % [
+			player.item_name(id), int(buff.get("battles", 10)), int(buff.get("multiplier", 10))]
+	return "你服下了%s，体力恢复到 %d/%d，浑身是劲。" % [player.item_name(id), player.hp_cur, player.max_hp()]
 
 
 # ---------- 铁匠（扩展契约 §4.4） ----------
@@ -708,6 +799,14 @@ func _combat_drug_page() -> void:
 func _combat_use(drug_id: String) -> void:
 	if combat == null or combat.finished:
 		_back_game()
+		return
+	if GameData.get_item(drug_id).has("exp_buff"):
+		# 加速丹不回体力：不算回合动作，怪物不还手（use_drug 对 buff 丹只会返回 ""/none）
+		if player.use_drug(drug_id) != "":
+			_render_combat("你翻遍背包也没找到这种药。")
+			return
+		needs_save = true
+		_render_combat(_drug_used_msg(drug_id))
 		return
 	var hp_before := player.hp_cur
 	match player.use_drug(drug_id):

@@ -41,6 +41,10 @@ var dungeon_day: int = -1
 var dungeon_kills: int = 0
 var dungeon_deadline: int = 0
 
+## 经验加速丹 buff：剩余场次数 + 生效倍率（战斗胜利结算时消耗 1 场次）
+var exp_buff_left: int = 0
+var exp_buff_mult: int = 10
+
 
 func _ready() -> void:
 	rng.randomize()
@@ -70,6 +74,8 @@ func new_game(name_text: String, gen: String) -> void:
 	dungeon_day = -1
 	dungeon_kills = 0
 	dungeon_deadline = 0
+	exp_buff_left = 0
+	exp_buff_mult = 10
 	var weapon_id := String(start.get("weapon", ""))
 	if weapon_id != "" and GameData.has_item(weapon_id):
 		var idx := add_equip(weapon_id)
@@ -98,6 +104,8 @@ func write_to(save: Dictionary) -> void:
 		"dungeon_day": dungeon_day,
 		"dungeon_kills": dungeon_kills,
 		"dungeon_deadline": dungeon_deadline,
+		"exp_buff_left": exp_buff_left,
+		"exp_buff_mult": exp_buff_mult,
 	}
 
 
@@ -135,6 +143,8 @@ func read_from(save: Dictionary) -> bool:
 	dungeon_day = int(p.get("dungeon_day", -1))
 	dungeon_kills = maxi(int(p.get("dungeon_kills", 0)), 0)
 	dungeon_deadline = maxi(int(p.get("dungeon_deadline", 0)), 0)
+	exp_buff_left = maxi(int(p.get("exp_buff_left", 0)), 0)
+	exp_buff_mult = maxi(int(p.get("exp_buff_mult", 10)), 1)
 	hp_cur = clampi(int(p.get("hp", max_hp())), 0, max_hp())
 	_emit_all()
 	return true
@@ -409,16 +419,38 @@ func repair_hand() -> void:
 	inventory_changed.emit()
 
 
-## 使用药品，返回 ""=成功 / "none"=没有该药 / "full"=满血（扩展契约 §4.1）
+## 使用药品，返回 ""=成功 / "none"=没有该药 / "full"=满血（扩展契约 §4.1）。
+## 带 exp_buff 的丹药走加速 buff：不回体力、不受满血限制。
 func use_drug(id: String) -> String:
 	var def := GameData.get_item(id)
 	if def.is_empty() or String(def.get("type", "")) != "drug" or count_stack(id) <= 0:
 		return "none"
+	if def.has("exp_buff"):
+		var buff: Dictionary = def.get("exp_buff", {})
+		apply_exp_buff(int(buff.get("battles", 10)), int(buff.get("multiplier", 10)))
+		remove_stack(id, 1)
+		return ""
 	if hp_cur >= max_hp():
 		return "full"
 	heal(int(def.get("heal", 0)))
 	remove_stack(id, 1)
 	return ""
+
+
+# ---------- 经验加速丹 buff ----------
+
+## 激活加速：剩余场次取较大值，倍率随最新一颗
+func apply_exp_buff(battles: int, multiplier: int) -> void:
+	exp_buff_left = maxi(exp_buff_left, maxi(battles, 0))
+	exp_buff_mult = maxi(multiplier, 1)
+
+
+## 战斗胜利结算时消耗 1 场次，返回生效倍率（未激活返回 1）
+func consume_exp_buff() -> int:
+	if exp_buff_left <= 0:
+		return 1
+	exp_buff_left -= 1
+	return exp_buff_mult
 
 
 # ---------- 位置 / 福利周 ----------

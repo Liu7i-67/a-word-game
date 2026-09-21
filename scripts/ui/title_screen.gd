@@ -20,6 +20,8 @@ func _ready() -> void:
 	_build_ui()
 	_router.handle("story:-1")
 	_render()
+	# 检查更新是异步的：结果回填 router.page 后重渲染当前页
+	_router.page_changed.connect(_render)
 
 
 func _build_ui() -> void:

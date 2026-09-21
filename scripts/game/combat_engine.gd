@@ -21,6 +21,7 @@ var reward_copper := 0
 var reward_item := ""
 var reward_equip := ""
 var level_gained := 0
+var exp_mult := 1
 var weapon_broke_name := ""
 var log_lines: PackedStringArray = []
 
@@ -91,6 +92,9 @@ func _grant_win_rewards(player: PlayerCore) -> void:
 	var m := GameData.get_monster(monster_id)
 	var exp_range: Array = m.get("exp", [1, 1])
 	reward_exp = player.rng.randi_range(int(exp_range[0]), int(exp_range[1]))
+	# 经验加速丹：激活则本场结算 ×N，并消耗 1 场次
+	exp_mult = player.consume_exp_buff()
+	reward_exp *= exp_mult
 	var copper_range: Array = m.get("copper", [0, 0])
 	reward_copper = player.rng.randi_range(int(copper_range[0]), int(copper_range[1]))
 	if player.rng.randi() % 100 < int(m.get("drop_rate", 0)):

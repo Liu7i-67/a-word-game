@@ -6,6 +6,8 @@
     1. 调用 scripts/build_apk.ps1 递增版本并打包（版本号写入 export_presets.cfg，不入库）。
     2. 从 env/.env 读取 GITHUB_TOKEN。
     3. 在 GitHub 仓库创建 tag（v{版本号}）与 Release，上传 APK 资产。
+    4. 自动提交 project.godot 的版本号同步并推送 master。
+    所有 git 与 API 操作均用 token 认证并禁用凭证助手，全程不弹凭证选择窗口。
     若同名 tag 的 Release 已存在：更新其资产（先删同名旧资产再上传）。
 
 .PARAMETER VersionBump
@@ -33,6 +35,9 @@ $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# git 一律非交互：终端不提问；stderr 转 stdout（防 PS5.1 把 git 进度当异常）
+$env:GIT_TERMINAL_PROMPT = '0'
+$env:GIT_REDIRECT_STDERR = '2>&1'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 # ---------- 1. 打包（复用 build_apk.ps1：版本号 + 导入 + 导出 + 签名校验） ----------
@@ -93,9 +98,39 @@ $fi = Get-Item $apk
 # 上传接口的返回体里 html_url 可能为空，按 tag 重查一次拿权威地址
 $rel = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$Repo/releases/tags/$tag" -Method Get
 
+# ---------- 6. 源码推送（提交版本号同步，全程 token 认证，不弹凭证窗口） ----------
+# origin 指向带 token 的地址：后续手动 git push / pull 也不会再弹凭证选择窗口
+$pushUrl = "https://x-access-token:$token@github.com/$Repo.git"
+git remote set-url origin $pushUrl
+git config branch.master.remote origin
+git config branch.master.merge refs/heads/master
+
+$pushOk = $false
+git add project.godot
+git diff --cached --quiet
+if ($LASTEXITCODE -eq 1) {
+    git -c credential.helper= commit -m "ci: 版本号同步 v$verName" | Out-Null
+    Write-Host "已提交版本号同步 commit" -ForegroundColor DarkGray
+}
+# -c credential.helper= 禁用所有凭证助手：token 失效时报干净错误，而不是弹 GUI 选凭证
+git -c credential.helper= push origin master
+if ($LASTEXITCODE -eq 0) {
+    $pushOk = $true
+} else {
+    Write-Host "警告：master 推送失败（Release 本身已发布成功），请稍后手动推送" -ForegroundColor Yellow
+}
+
+# 其余未提交改动只提示，不代提交
+$dirty = git status --porcelain
+if ($dirty) {
+    Write-Host "提示：工作区还有未提交改动（本次仅自动提交 project.godot）：" -ForegroundColor Yellow
+    Write-Host "$dirty" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "================ 发布完成 ================" -ForegroundColor Green
 Write-Host ("版本    : {0} (versionCode {1})" -f $verName, $verCode)
 Write-Host ("Release : {0}" -f $rel.html_url)
 Write-Host ("资产    : {0}（{1} MB）" -f $apkName, [math]::Round($fi.Length / 1MB, 1))
+Write-Host ("源码    : {0}" -f $(if ($pushOk) { 'master 已推送' } else { '推送失败（见上方警告）' }))
 Write-Host "==========================================" -ForegroundColor Green

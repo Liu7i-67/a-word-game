@@ -60,5 +60,15 @@
   "ui": {
     "click_cooldown_ms": 250,
     "link_color": "#3d7edb"
+  },
+  "gm": {
+    "password": "676767",
+    "exp_pill": "shibeijingyandan",
+    "exp_pill_count": 3,
+    "knife": "xiaodao",
+    "knife_count": 1
+  },
+  "update": {
+    "repo": "Liu7i-67/a-word-game"
   }
 }
