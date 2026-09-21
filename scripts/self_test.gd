@@ -16,6 +16,12 @@ func _process(_delta: float) -> bool:
 	if _started:
 		return false
 	_started = true
+	# 自动战斗用例含真实定时等待，改走异步协程驱动；quit 在协程末尾调用
+	_run_all()
+	return false
+
+
+func _run_all() -> void:
 	GameData.load_all()
 	_test_data()
 	_test_rules()
@@ -34,6 +40,7 @@ func _process(_delta: float) -> bool:
 	_test_trade_engine()
 	_test_trade_router(player)
 	_test_sell_equip(player)
+	await _test_auto_battle(player)
 	_test_drop_equip(player)
 	_test_title_click_path(player)
 	_test_scroll_fix(player)
@@ -47,7 +54,16 @@ func _process(_delta: float) -> bool:
 			printerr("FAIL: " + f)
 		print("SELF_TEST FAIL (%d)" % fails.size())
 	quit(0 if fails.is_empty() else 1)
-	return true
+
+
+## 轮询等待条件成立（自动战斗等异步用例用），超时记失败
+func _wait_until(cond: Callable, timeout_sec: float, what: String) -> void:
+	var deadline := Time.get_ticks_msec() + int(timeout_sec * 1000)
+	while Time.get_ticks_msec() < deadline:
+		if cond.call():
+			return
+		await create_timer(0.02).timeout
+	check(cond.call(), what + "（等待超时）")
 
 
 func check(cond: bool, what: String) -> void:
@@ -1051,11 +1067,12 @@ func _test_sell_equip(player: PlayerCore) -> void:
 	check(router.page.contains("出售装备"), "铁匠页出售装备入口")
 	router.handle("sell_equip_page")
 	check(router.page.contains("回收320铜贝"), "回收页列出弯刀回收价 320")
-	# 手持装备回收：先自动卸下
+	check(not router.page.contains("sell_equip_all"), "单件装备不显示批量入口")
+	# 手持装备回收：先自动卸下；成交后留在出售页继续出售
 	router.handle("sell_equip:0")
 	check(player.copper == 320, "手持弯刀回收入账 320")
 	check(player.equips.is_empty() and player.hand == -1, "手持卖出自动卸下")
-	check(router.page.contains("回炉"), "回收提示页")
+	check(router.page.contains("回炉") and router.page.contains("出售装备"), "回收后留在出售页（继续出售，免往返）")
 	# 卖出低下标装备：手持下标前移
 	var i1 := player.add_equip("dahuandao")
 	var i2 := player.add_equip("xiaojinsiteng")
@@ -1064,12 +1081,99 @@ func _test_sell_equip(player: PlayerCore) -> void:
 	router.handle("sell_equip:0")
 	check(player.equips.size() == 1 and player.hand == 0, "卖出低下标后手持下标前移")
 	check(player.copper == 320 + Rules.equip_sell_price(12000), "大环刀回收 4800")
+	# 批量出售全部同名装备
+	var i3 := player.add_equip("dahuandao")
+	var i4 := player.add_equip("dahuandao")
+	check(i3 >= 0 and i4 >= 0, "两把大环刀入包")
+	router.handle("sell_equip_page")
+	check(router.page.contains("全部出售2件"), "同名多件显示批量入口")
+	var copper_all := player.copper
+	router.handle("sell_equip_all:dahuandao")
+	check(player.equips.size() == 1 and player.hand == 0, "批量出售只清同名，手持小金丝藤保留")
+	check(player.copper == copper_all + 2 * Rules.equip_sell_price(12000), "批量出售入账=单价×件数")
+	check(router.page.contains("全收了") and router.page.contains("出售装备"), "批量成交后留在出售页")
+	router.handle("sell_equip_all:dahuandao")
+	check(player.equips.size() == 1 and player.copper == copper_all + 2 * Rules.equip_sell_price(12000), "无同名可卖时不重复入账")
 	# 非法下标安全兜底
 	router.handle("sell_equip:9")
 	check(router.page.contains("出售装备") and player.equips.size() == 1, "非法下标回回收页")
 	router.handle("sell_equip:0")
 	check(player.equips.is_empty(), "清空装备")
-	check(player.copper == 320 + 4800 + Rules.equip_sell_price(150), "小金丝藤回收 60")
+	check(player.copper == 320 + 4800 + 2 * Rules.equip_sell_price(12000) + Rules.equip_sell_price(150),
+		"小金丝藤回收 60（含批量入账对账）")
+
+
+# ---------- 5.11b 自动战斗（GameScreen 真实按钮路径，tick 调快免真等） ----------
+
+func _test_auto_battle(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("挂机员", "♂")
+	player.rng.seed = 42
+
+	# 场景可战斗对象探测：农场=病鸡、酒馆=无、地宫=抢劫者
+	router.handle("goto:nungcoeng")
+	check(router.scene_first_monster() == "bingji", "自动战斗：农场首个可战斗对象=病鸡")
+	router.handle("goto:zaugun")
+	check(router.scene_first_monster() == "", "自动战斗：酒馆无可战斗对象")
+	router.handle("goto:digung")
+	check(router.scene_first_monster() == Rules.dungeon_monster(), "自动战斗：地宫可战斗对象=抢劫者")
+	router.handle("goto:zaugun")
+
+	# UI 路径：tick 调到 80ms（远快于真实 450ms，但慢于轮询间隔 20ms，页面状态采样可靠）；
+	# 点击冷却临时归零——首帧累积 delta 会让首个 create_timer 立即恢复，靠真实时钟过 250ms 冷却不稳
+	var ui_cfg: Dictionary = GameData.config.get("ui", {})
+	ui_cfg["auto_tick_ms"] = 80
+	ui_cfg["click_cooldown_ms"] = 0
+	var gs_script: GDScript = load("res://scripts/ui/game_screen.gd")
+	var game: Control = gs_script.new(router, player)
+	root.add_child(game)
+
+	# 无怪场景：提示且不启动
+	game._on_auto_toggle()
+	check(not bool(game._auto_active) and String(game._toast.text) == "当前场景无可战斗对象", "自动战斗：无怪提示且不启动")
+
+	# 低体力（<30%）：提示且不启动（间隔 > 点击冷却 250ms 再点）
+	player.hurt(player.hp_cur - 29)
+	await create_timer(0.3).timeout
+	game._on_auto_toggle()
+	check(player.hp_cur * 100 < player.max_hp() * Rules.auto_stop_hp_pct(), "自动战斗：低体力前置成立")
+	check(not bool(game._auto_active) and String(game._toast.text) == "当前体力过低，不支持自动战斗", "自动战斗：低体力提示且不启动")
+
+	# 满体力开打：自动发起战斗 → 攻击至胜利 → 继续 → 返回游戏 → 再战
+	player.heal(9999)
+	await create_timer(0.3).timeout
+	router.handle("goto:nungcoeng")
+	game._on_auto_toggle()
+	check(bool(game._auto_active) and String(game._auto_btn.text) == "战斗ing", "自动战斗：启动并切换文案战斗ing")
+	await _wait_until(func() -> bool: return router.combat != null and not router.combat.finished, 3.0, "自动战斗：自动发起战斗")
+	# 首战削到残血：下一 tick 玩家先手必胜（缩序列长度，防自然损耗干扰后续断言）
+	router.combat.monster_hp = 1
+	router.combat.monster_def = 0
+	await _wait_until(func() -> bool: return router.page.contains("战斗胜利"), 3.0, "自动战斗：自动攻击至胜利页")
+	await _wait_until(func() -> bool: return router.page.contains("战利品"), 3.0, "自动战斗：胜利页自动点继续")
+	await _wait_until(func() -> bool: return router.page.contains("威尼斯农场") and router.combat == null, 3.0, "自动战斗：战利品页自动返回游戏")
+	await _wait_until(func() -> bool: return router.combat != null and not router.combat.finished, 3.0, "自动战斗：回场景后自动再战")
+
+	# 体力压到阈值下 → 循环自动终止 + 按钮还原 + 提示
+	player.hurt(ceili(player.hp_cur - player.max_hp() * 0.2))
+	await _wait_until(func() -> bool: return not bool(game._auto_active), 3.0, "自动战斗：低体力自动终止")
+	check(String(game._auto_btn.text) == "自动战斗", "自动战斗：终止后按钮文案还原")
+	check(String(game._toast.text).contains("体力低于30%"), "自动战斗：低体力终止提示")
+
+	# 手动停止：再次启动后点击「战斗ing」立即停
+	player.heal(9999)
+	await create_timer(0.3).timeout
+	game._on_auto_toggle()
+	check(bool(game._auto_active), "自动战斗：可再次启动")
+	game._on_auto_toggle()
+	check(not bool(game._auto_active) and String(game._auto_btn.text) == "自动战斗", "自动战斗：点击战斗ing手动停止")
+
+	# 等挂起的循环协程走完最后一拍再释放节点，避免协程在已释放实例上恢复
+	await create_timer(0.15).timeout
+	game.queue_free()
+	ui_cfg["auto_tick_ms"] = 450
+	ui_cfg["click_cooldown_ms"] = 250
 
 
 # ---------- 5.12 滚动配置断言（契约 trade-spec §8） ----------

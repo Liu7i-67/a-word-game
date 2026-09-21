@@ -184,10 +184,20 @@ func run(main: Control) -> void:
 		await _shot("39_teleport")
 	else:
 		_log("TOUR SKIP: world 数据未就位，跳过 37-39 航海贸易截图")
-	# 40 装备回收页（铁匠，任何数据状态都可拍）
+	# 40 装备回收页（铁匠，任何数据状态都可拍）；补三把大环刀并成交一把，
+	# 让截图同时呈现「全部出售批量入口」与「卖出后留在本页」的成交提示
 	_play(game, "goto:titzoengpou")
 	_play(game, "npc:titzoengpou:smith")
+	for i in 3:
+		router.player.add_equip("dahuandao")
+	var dup_idx := -1
+	for i in router.player.equips.size():
+		if String(router.player.equips[i].get("id", "")) == "dahuandao":
+			dup_idx = i
+			break
 	_play(game, "sell_equip_page")
+	if dup_idx >= 0:
+		_play(game, "sell_equip:%d" % dup_idx)
 	await _shot("40_sell_equip")
 
 	print("SHOT TOUR DONE -> ", _dir)

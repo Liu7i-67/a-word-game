@@ -83,6 +83,11 @@ static func revive_scene() -> String:
 	return String(section("combat").get("revive_scene", "gaautong"))
 
 
+## 自动战斗体力终止阈值（百分比）：低于该比例自动停止/禁止启动（🔍交互优化）
+static func auto_stop_hp_pct() -> int:
+	return maxi(int(section("combat").get("auto_stop_hp_pct", 30)), 0)
+
+
 static func teleport_cost_silver() -> int:
 	return int(section("teleport").get("cost_silver", 10))
 
@@ -109,6 +114,11 @@ static func equip_sell_price(base_price: int) -> int:
 
 static func click_cooldown_ms() -> int:
 	return int(section("ui").get("click_cooldown_ms", 250))
+
+
+## 自动战斗每步间隔（毫秒）：模拟人手速，逐步驱动「攻击/继续/返回」（🔍交互优化）
+static func auto_tick_ms() -> int:
+	return maxi(int(section("ui").get("auto_tick_ms", 450)), 50)
 
 
 static func link_color() -> String:

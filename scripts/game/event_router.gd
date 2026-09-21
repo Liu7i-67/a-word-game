@@ -125,6 +125,8 @@ func handle(event: String, param: String = "") -> void:
 			page = Pages.sell_equip_page(player)
 		"sell_equip":
 			_sell_equip(int(arg))
+		"sell_equip_all":
+			_sell_equip_all(arg)
 		"teleport":
 			page = Pages.teleport_page(player)
 		"tp":
@@ -313,6 +315,16 @@ func _npc(scene_id: String, npc_id: String) -> void:
 
 
 # ---------- 战斗 ----------
+
+## 当前场景第一个可战斗对象的怪物 id（无则 ""）——自动战斗入口判定用
+func scene_first_monster() -> String:
+	var monsters: Array = GameData.get_scene(player.location).get("monsters", [])
+	for m: Dictionary in monsters:
+		var id := String(m.get("id", ""))
+		if GameData.has_monster(id):
+			return id
+	return ""
+
 
 func _fight(monster_id: String) -> void:
 	if not GameData.has_monster(monster_id):
@@ -883,7 +895,8 @@ func _equip_off(idx: int) -> void:
 	needs_save = true
 
 
-## 铁匠回收装备（契约 trade-spec §7）：手持先自动卸下，按基准价 40% 入账
+## 铁匠回收装备（契约 trade-spec §7）：手持先自动卸下，按基准价 40% 入账。
+## 成交后留在出售页（带成交提示继续出售），省去「返回铁匠铺→出售装备」往返
 func _sell_equip(idx: int) -> void:
 	var inst := player.sell_equip(idx)
 	if inst.is_empty():
@@ -892,5 +905,27 @@ func _sell_equip(idx: int) -> void:
 	var id := String(inst.get("id", ""))
 	var earn := Rules.equip_sell_price(int(GameData.get_item(id).get("price", 0)))
 	player.add_copper(earn)
-	page = Pages.smith_result(player, "铁匠：成，「%s」回炉我收了，%d 铜贝拿好，别弄丢了。" % [player.item_name(id), earn])
+	page = Pages.sell_equip_page(player, "铁匠：成，「%s」回炉我收了，%d 铜贝拿好，别弄丢了。还有要出的吗？" % [
+		player.item_name(id), earn])
+	needs_save = true
+
+
+## 批量回收全部同名装备：倒序移除（sell_equip 内部处理手持下标前移）
+func _sell_equip_all(id: String) -> void:
+	if not GameData.has_item(id):
+		page = Pages.sell_equip_page(player)
+		return
+	var unit := Rules.equip_sell_price(int(GameData.get_item(id).get("price", 0)))
+	var count := 0
+	for i in range(player.equips.size() - 1, -1, -1):
+		if String(player.equips[i].get("id", "")) == id:
+			player.sell_equip(i)
+			count += 1
+	if count == 0:
+		page = Pages.sell_equip_page(player)
+		return
+	var earn := unit * count
+	player.add_copper(earn)
+	page = Pages.sell_equip_page(player, "铁匠：成，%d件「%s」回炉我全收了，%d 铜贝拿好，别弄丢了。" % [
+		count, player.item_name(id), earn])
 	needs_save = true

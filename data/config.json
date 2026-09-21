@@ -1,5 +1,5 @@
 {
-  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。本轮增补(扩展契约§3.4)：economy.repair_cost_per_point=铁匠修理单价；combat.dungeon_*=地宫挑战(击杀目标/时限/通关奖励)。本轮增补(贸易契约§1-§7)：trade.*=港口定价(特产折扣85%/热门倍率180%/每港每日热门2个)；teleport.cost_copper=跨港传送船票铜贝价(文案仍写10银，cost_silver仅作展示)；economy.rumor_cost=酒保打听行情一次的价钱；economy.equip_sell_ratio_pct=装备回收购价为基准价的百分比。",
+  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。本轮增补(扩展契约§3.4)：economy.repair_cost_per_point=铁匠修理单价；combat.dungeon_*=地宫挑战(击杀目标/时限/通关奖励)。本轮增补(贸易契约§1-§7)：trade.*=港口定价(特产折扣85%/热门倍率180%/每港每日热门2个)；teleport.cost_copper=跨港传送船票铜贝价(文案仍写10银，cost_silver仅作展示)；economy.rumor_cost=酒保打听行情一次的价钱；economy.equip_sell_ratio_pct=装备回收购价为基准价的百分比。本轮增补(交互优化)：combat.auto_stop_hp_pct=自动战斗体力终止阈值(百分比，低于即停)；ui.auto_tick_ms=自动战斗每步间隔(模拟人手速)。",
   "start": {
     "scene": "zaugun",
     "level": 1,
@@ -31,6 +31,7 @@
     "death_loss_max": 5000,
     "revive_ratio_pct": 50,
     "revive_scene": "gaautong",
+    "auto_stop_hp_pct": 30,
     "dungeon_kill_goal": 40,
     "dungeon_time_limit_sec": 3000,
     "dungeon_reward_copper": 20000,
@@ -59,7 +60,8 @@
   },
   "ui": {
     "click_cooldown_ms": 250,
-    "link_color": "#3d7edb"
+    "link_color": "#3d7edb",
+    "auto_tick_ms": 450
   },
   "gm": {
     "password": "676767",

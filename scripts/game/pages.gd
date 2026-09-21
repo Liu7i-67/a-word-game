@@ -6,6 +6,9 @@ class_name Pages
 const HEADER_COLOR := "#ff9900"
 const DIM_COLOR := "#9a9a9a"
 const SEP := " . "
+## 链接字号：触屏可交互文本的最小触控目标对齐顶部导航按钮（高 58px），
+## 比正文（26）大一号并配合 PageView 行距，让可点击行高≈按钮高
+const LINK_FONT_SIZE := 30
 
 
 static func esc(s: String) -> String:
@@ -14,7 +17,8 @@ static func esc(s: String) -> String:
 
 
 static func link(event: String, label: String) -> String:
-	return "[color=%s][url=%s]%s[/url][/color]" % [Rules.link_color(), event, esc(label)]
+	return "[color=%s][url=%s][font_size=%d]%s[/font_size][/url][/color]" % [
+		Rules.link_color(), event, LINK_FONT_SIZE, esc(label)]
 
 
 static func header(text: String) -> String:
@@ -1004,11 +1008,14 @@ static func tavern_rumor_result(player: PlayerCore, rumor_lines: Array[String]) 
 
 # ---------- 铁匠装备回收（契约 trade-spec §7） ----------
 
-## 出售装备页：全部装备实例（名称/耐久/回收价=round(price×40%)），sell_equip:<idx>
-static func sell_equip_page(player: PlayerCore) -> String:
+## 出售装备页：全部装备实例（名称/耐久/回收价=round(price×40%)），sell_equip:<idx>。
+## 同名多件给批量入口 sell_equip_all:<id>；notice 显示上一笔成交（卖出后留在本页继续出售）
+static func sell_equip_page(player: PlayerCore, notice: String = "") -> String:
 	var lines: Array[String] = []
 	lines.append(header("铁匠铺 · 出售装备"))
 	lines.append("铁匠：压箱底的旧家伙也值几个钱，拿来我按成色回收。")
+	if notice != "":
+		lines.append("[color=#6fd66f]%s[/color]" % esc(notice))
 	if player.equips.is_empty():
 		lines.append(dim("你身上一件装备都没有。"))
 	for i in player.equips.size():
@@ -1018,9 +1025,16 @@ static func sell_equip_page(player: PlayerCore) -> String:
 		var max_dur := maxi(int(def.get("durability", 1)), 1)
 		var sell := Rules.equip_sell_price(int(def.get("price", 0)))
 		var marker := "（手持）" if i == player.hand else ""
+		var same := 0
+		for other: Dictionary in player.equips:
+			if String(other.get("id", "")) == id:
+				same += 1
+		var actions: Array[String] = [link("sell_equip:%d" % i, "[出售]")]
+		if same >= 2:
+			actions.append(link("sell_equip_all:%s" % id, "[全部出售%d件]" % same))
 		lines.append("▉%s%s 耐久%d/%d 回收%d铜贝  %s" % [
 			esc(player.item_name(id)), marker, int(inst.get("dur", 0)), max_dur, sell,
-			link("sell_equip:%d" % i, "[出售]"),
+			SEP.join(PackedStringArray(actions)),
 		])
 	lines.append("铜贝：%d" % player.copper)
 	lines.append("")

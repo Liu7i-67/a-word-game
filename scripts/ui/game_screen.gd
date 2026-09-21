@@ -19,6 +19,13 @@ var _toast_tween: Tween
 var _safe_frame: SafeAreaFrame
 var _last_click_ms := -1000000
 
+## 自动战斗：激活后循环模拟真人点击（首怪→攻击→继续→返回游戏→再战），
+## 体力低于阈值 / 场景无怪 / 战败 / 离开场景时自动终止
+var _auto_btn: Button
+var _auto_active := false
+var _auto_scene := ""
+var _auto_phase := ""
+
 
 func _init(router: EventRouter, player: PlayerCore) -> void:
 	_router = router
@@ -100,6 +107,12 @@ func _build_ui() -> void:
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_btn.pressed.connect(_on_manual_save)
 	nav.add_child(save_btn)
+	_auto_btn = Button.new()
+	_auto_btn.text = "自动战斗"
+	_auto_btn.custom_minimum_size = Vector2(0, 58)
+	_auto_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_auto_btn.pressed.connect(_on_auto_toggle)
+	nav.add_child(_auto_btn)
 
 	# 页面区（禁用横向滚动：富文本按容器宽度换行）
 	_scroll = ScrollContainer.new()
@@ -160,6 +173,71 @@ func _on_menu(event: String) -> void:
 func _on_manual_save() -> void:
 	_save()
 	_show_toast("存档已保存")
+
+
+# ---------- 自动战斗 ----------
+
+func _on_auto_toggle() -> void:
+	if _auto_active:
+		_stop_auto("")
+		return
+	if _too_fast():
+		return
+	if _player.hp_cur * 100 < _player.max_hp() * Rules.auto_stop_hp_pct():
+		_show_toast("当前体力过低，不支持自动战斗")
+		return
+	if _router.scene_first_monster() == "":
+		_show_toast("当前场景无可战斗对象")
+		return
+	_auto_active = true
+	_auto_scene = _player.location
+	_auto_phase = ""
+	_auto_btn.text = "战斗ing"
+	_auto_run()
+
+
+func _stop_auto(message: String) -> void:
+	_auto_active = false
+	_auto_btn.text = "自动战斗"
+	if message != "":
+		_show_toast(message)
+
+
+## 自动战斗循环：逐步模拟真人点击，每步间隔 auto_tick_ms。
+## 战斗中点「攻击」→ 胜利页点「继续」→ 战利品页点「返回游戏」→ 回场景再战。
+func _auto_run() -> void:
+	while _auto_active:
+		if not is_inside_tree():
+			return
+		if _player.location != _auto_scene:
+			_stop_auto("已离开战斗场景，自动战斗结束")
+			return
+		if _player.hp_cur * 100 < _player.max_hp() * Rules.auto_stop_hp_pct():
+			_stop_auto("体力低于30%，自动战斗结束")
+			return
+		var combat := _router.combat
+		if combat != null and not combat.finished:
+			_router.handle("attack")
+		elif combat != null and combat.finished and combat.won:
+			if _auto_phase == "reward":
+				_router.handle("combat_leave")
+				_auto_phase = ""
+			else:
+				_router.handle("combat_reward")
+				_auto_phase = "reward"
+		elif combat != null:
+			# 战败：已被好心人救回城里，停止挂机等玩家自己恢复
+			_stop_auto("战斗失败，自动战斗结束")
+			return
+		else:
+			_auto_phase = ""
+			var monster_id := _router.scene_first_monster()
+			if monster_id == "":
+				_stop_auto("当前场景无可战斗对象，自动战斗结束")
+				return
+			_router.handle("fight:" + monster_id)
+		_after_event()
+		await get_tree().create_timer(Rules.auto_tick_ms() / 1000.0).timeout
 
 
 func _too_fast() -> bool:

@@ -23,7 +23,8 @@ func _init() -> void:
 	add_theme_font_size_override("normal_font_size", 26)
 	add_theme_font_size_override("bold_font_size", 29)
 	add_theme_font_size_override("italics_font_size", 26)
-	add_theme_constant_override("line_separation", 10)
+	# 行距与链接字号（Pages.LINK_FONT_SIZE）配合：可交互行高≈顶部按钮高 58px，触屏不易误点
+	add_theme_constant_override("line_separation", 14)
 	meta_clicked.connect(_on_meta_clicked)
 
 
