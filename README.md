@@ -2,6 +2,8 @@
 
 基于 Godot 4.7.1 的文字冒险游戏，复刻《纵横四海》网页文字 MUD 的核心机制（设计文档：`D:\Documents\纵横四海\游戏设计机制.md`）。2D 纯 UI 驱动，竖屏触屏操作，目标平台 Android。
 
+仓库：https://github.com/Liu7i-67/a-word-game ｜ APK 发布页：https://github.com/Liu7i-67/a-word-game/releases
+
 ## 当前实现（最小可玩版）
 
 - **开场 7 页剧情（逐字原文）+ 角色创建**（名字 + 注册男/注册女）
@@ -26,14 +28,17 @@ Godot --headless --path . -s scripts/self_test.gd
 SHOT_DIR=E:/qbb/github/a-word-game/.shots Godot --path . --audio-driver Dummy -- --shot-tour
 ```
 
-## 打包安卓 APK
+## 打包安卓 APK 并发布 GitHub Release
 
 ```
-build.bat                    # patch 版本号 +1 并打包
-build.bat -VersionBump none  # 不改版本号，仅重新打包
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release_apk.ps1                    # patch 版本 +1 → 打包 → 发 Release
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release_apk.ps1 -VersionBump minor # minor +1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release_apk.ps1 -VersionBump none  # 不改版本重新发布
 ```
 
-依赖：Android SDK（本机 `E:\qbb\soft\android_sdk`）、导出模板、签名 keystore（`env/upload-keystore.jks`，沿用 a-game 的上传密钥）。产物输出到 `builds/`。`data/*.json` 经 `export_presets.cfg` 的 include_filter 打入包体。
+一条命令完成：版本号递增（写入 export_presets.cfg）→ 导入资源 → 导出签名 APK（builds/a-word-game.apk）→ 在 GitHub 创建 tag（v版本号）与 Release → 上传 `a-word-game-版本号.apk`。依赖 `env/.env` 的 `GITHUB_TOKEN` 与 `env/upload-keystore.jks`（均不入库）。
+
+只打包不发布：`build.bat`（等价于 `scripts\build_apk.ps1`）。
 
 ## 目录结构（feature-based）
 
