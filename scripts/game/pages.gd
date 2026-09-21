@@ -6,6 +6,8 @@ class_name Pages
 const HEADER_COLOR := "#ff9900"
 const DIM_COLOR := "#9a9a9a"
 const SEP := " . "
+## ui-opt 契约 §3.1：加宽分隔（全角空格包间隔点）——城内地图/大世界等高密度入口防触屏误触
+const WIDE_SEP := "　·　"
 ## 链接字号：触屏可交互文本的最小触控目标对齐顶部导航按钮（高 58px），
 ## 比正文（26）大一号并配合 PageView 行距，让可点击行高≈按钮高
 const LINK_FONT_SIZE := 30
@@ -477,16 +479,22 @@ static func equip_detail(player: PlayerCore, idx: int) -> String:
 # ---------- 城内地图 ----------
 
 static func city_map() -> String:
+	# ui-opt 契约 §3.1：每行 4→3 个入口 + 全角加宽分隔 + 行间空行，防相邻误触（事件词全部不变）
 	var lines: Array[String] = []
 	lines.append(header(GameData.city_map_name))
+	var rows: Array[String] = []
 	var row: Array[String] = []
 	for scene: Dictionary in GameData.map_scenes():
 		row.append(link("goto:%s" % String(scene.get("id", "")), String(scene.get("short", scene.get("name", "")))))
-		if row.size() >= 4:
-			lines.append(SEP.join(PackedStringArray(row)))
+		if row.size() >= 3:
+			rows.append(WIDE_SEP.join(PackedStringArray(row)))
 			row = []
 	if not row.is_empty():
-		lines.append(SEP.join(PackedStringArray(row)))
+		rows.append(WIDE_SEP.join(PackedStringArray(row)))
+	for i in rows.size():
+		if i > 0:
+			lines.append("")
+		lines.append(rows[i])
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("worldmap", "大世界"))
 	lines.append("")
@@ -688,6 +696,7 @@ static func welfare_page(player: PlayerCore) -> String:
 
 
 ## GM 彩蛋密码盘：6 位密码框 + 9 个数字键（1-9）+ 清空/确认。
+## 数字键加大（[font_size=40] + U+3000 填充、键间 ≥2 全角空格、行间空行，ui-opt 契约 §3.1）防误触。
 ## 密码错误的反馈由 EventRouter 处理（无任何提示），本页只管呈现。
 static func gm_password_page(entered: String) -> String:
 	var lines: Array[String] = []
@@ -700,14 +709,20 @@ static func gm_password_page(entered: String) -> String:
 	lines.append("[center][b][font_size=40]%s[/font_size][/b][/center]" % " ".join(PackedStringArray(slots)))
 	lines.append(dim("（请输入 6 位数字密码）"))
 	lines.append("")
-	for row in 3:
+	# ui-opt 契约 §3.1：数字键 [font_size=40] + U+3000 填充，键间 ≥2 全角空格、行间空行
+	for row_i in 3:
+		if row_i > 0:
+			lines.append("")
 		var cells: Array[String] = []
 		for col in 3:
-			var d := row * 3 + col + 1
-			cells.append(link("gm_pwd:%d" % d, "%d" % d))
-		lines.append("[center]%s[/center]" % SEP.join(PackedStringArray(cells)))
+			var d := row_i * 3 + col + 1
+			cells.append("[color=%s][url=gm_pwd:%d][font_size=40]　%d　[/font_size][/url][/color]" % [
+				Rules.link_color(), d, d])
+		lines.append("[center]%s[/center]" % "　　".join(PackedStringArray(cells)))
 	lines.append("")
-	lines.append("[center]%s %s %s[/center]" % [link("gm_pwd:clear", "清空"), SEP, link("gm_pwd_ok", "确认")])
+	# ui-opt 契约 §3.1：清空/确认行同样加宽分隔
+	lines.append("[center]%s[/center]" % WIDE_SEP.join(PackedStringArray([
+		link("gm_pwd:clear", "清空"), link("gm_pwd_ok", "确认")])))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "返回"))
 	return join_lines(lines)
@@ -720,6 +735,8 @@ static func gm_reward_page(player: PlayerCore, pill_id: String, pill_count: int,
 	lines.append("福利官：暗号对上了！东西拿好，天知地知你知我知。")
 	if pill_count > 0:
 		lines.append("获得道具：%s ×%d" % [esc(player.item_name(pill_id)), pill_count])
+		# ui-opt 契约 §3.2：叠加口径说明（场次随服用累加）
+		lines.append(dim("加速效果可叠加：每颗×10，持续 10 场。"))
 	if knife_id != "":
 		lines.append("获得装备：%s" % esc(player.item_name(knife_id)))
 	lines.append("")
@@ -1540,7 +1557,15 @@ static func worldmap_page(player: PlayerCore) -> String:
 			continue
 		lines.append("")
 		lines.append("[b]%s[/b]" % esc(String(g[0])))
-		lines.append(SEP.join(row))
+		# ui-opt 契约 §3.1：组内场景名 3 个/行折行，分隔同样加宽
+		var chunk: Array[String] = []
+		for label_text: String in row:
+			chunk.append(label_text)
+			if chunk.size() >= 3:
+				lines.append(WIDE_SEP.join(PackedStringArray(chunk)))
+				chunk = []
+		if not chunk.is_empty():
+			lines.append(WIDE_SEP.join(PackedStringArray(chunk)))
 		var first_scene := GameData.get_scene(String(g[1][0]))
 		var flavor := String(first_scene.get("desc", "")).split("。")[0]
 		if flavor != "":

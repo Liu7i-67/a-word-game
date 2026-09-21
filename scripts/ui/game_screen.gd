@@ -1,6 +1,6 @@
 class_name GameScreen
 extends Control
-## 游戏主界面：顶栏（昵称/体力/铜贝）+ 导航按钮 + 超文本页面区（对应原版主渲染区）。
+## 游戏主界面：顶栏（昵称/体力/经验/铜贝）+ 底部固定操作栏 + 超文本页面区（对应原版主渲染区）。
 ## 业务逻辑全部在 EventRouter / PlayerCore，本类只负责渲染与转发点击。
 
 const MENU_EVENTS := {"状态": "status", "物品": "items", "地图": "map"}
@@ -13,10 +13,16 @@ var _scroll: ScrollContainer
 var _name_label: Label
 var _hp_bar: ProgressBar
 var _hp_text: Label
+var _xp_bar: ProgressBar
 var _copper_label: Label
 ## 输入行（input_mode="rename" 等输入类事件）：置于页面区上方，软键盘不遮挡
 var _input_row: HBoxContainer
 var _name_edit: LineEdit
+## 底部固定操作栏（ui-opt 契约 docs/ui-opt-spec.md §4）：上下文操作行 + 固定导航行，
+## 固定在页面区（scroll）下方、不随页面滚动，让常用/战斗/商店操作单手可达
+var _bottom_box: VBoxContainer
+var _ctx_row: HBoxContainer
+var _nav_row: HBoxContainer
 var _toast: Label
 var _toast_tween: Tween
 var _safe_frame: SafeAreaFrame
@@ -39,11 +45,13 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	_player.hp_changed.connect(_on_stats_changed)
+	_player.exp_changed.connect(_on_stats_changed)
 	_player.copper_changed.connect(_on_stats_changed)
 	_player.gold_changed.connect(_on_stats_changed)
 	_player.leveled_up.connect(_on_leveled_up)
 	_router.open_start_scene()
 	_render()
+	_refresh_ctx_row()  # 首屏也按当前上下文填充底部操作行（ui-opt 契约 §4）
 
 
 func _build_ui() -> void:
@@ -65,7 +73,7 @@ func _build_ui() -> void:
 	vbox.add_theme_constant_override("separation", 18)
 	margin.add_child(vbox)
 
-	# 顶栏：昵称 · 体力条 · 铜贝
+	# 顶栏：昵称 · [体力条 + 经验细条] · 铜贝（ui-opt 契约 §4：体力条下方加经验细条）
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 14)
 	vbox.add_child(top)
@@ -74,12 +82,18 @@ func _build_ui() -> void:
 	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top.add_child(_name_label)
 
+	# 体力条与经验细条共用一列 VBox，左右两侧昵称/铜贝与其垂直居中
+	var bars := VBoxContainer.new()
+	bars.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bars.add_theme_constant_override("separation", 4)
+	top.add_child(bars)
+
 	_hp_bar = ProgressBar.new()
 	_hp_bar.show_percentage = false
 	_hp_bar.custom_minimum_size = Vector2(0, 46)
 	_hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(_hp_bar)
+	bars.add_child(_hp_bar)
 
 	_hp_text = Label.new()
 	_hp_text.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -89,33 +103,23 @@ func _build_ui() -> void:
 	_hp_text.add_theme_font_size_override("font_size", 23)
 	_hp_bar.add_child(_hp_text)
 
+	# 经验细条（ui-opt 契约 §4）：高 8、无百分比文本，金色进度（#ffd700 系）/ 深色底
+	_xp_bar = ProgressBar.new()
+	_xp_bar.show_percentage = false
+	_xp_bar.custom_minimum_size = Vector2(0, 8)
+	_xp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_xp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var xp_bg := StyleBoxFlat.new()
+	xp_bg.bg_color = Color(0.14, 0.14, 0.16)
+	var xp_fill := StyleBoxFlat.new()
+	xp_fill.bg_color = Color("ffd700")
+	_xp_bar.add_theme_stylebox_override("background", xp_bg)
+	_xp_bar.add_theme_stylebox_override("fill", xp_fill)
+	bars.add_child(_xp_bar)
+
 	_copper_label = Label.new()
 	_copper_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top.add_child(_copper_label)
-
-	# 导航按钮行
-	var nav := HBoxContainer.new()
-	nav.add_theme_constant_override("separation", 14)
-	vbox.add_child(nav)
-	for label: String in MENU_EVENTS:
-		var btn := Button.new()
-		btn.text = label
-		btn.custom_minimum_size = Vector2(0, 58)
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.pressed.connect(_on_menu.bind(MENU_EVENTS[label]))
-		nav.add_child(btn)
-	var save_btn := Button.new()
-	save_btn.text = "存档"
-	save_btn.custom_minimum_size = Vector2(0, 58)
-	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	save_btn.pressed.connect(_on_manual_save)
-	nav.add_child(save_btn)
-	_auto_btn = Button.new()
-	_auto_btn.text = "自动战斗"
-	_auto_btn.custom_minimum_size = Vector2(0, 58)
-	_auto_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_auto_btn.pressed.connect(_on_auto_toggle)
-	nav.add_child(_auto_btn)
 
 	# 输入行（改名等输入类事件）：参照 TitleScreen 方案置于页面区上方，
 	# 不依赖窗口高度，也不会被移动端软键盘遮住
@@ -151,6 +155,42 @@ func _build_ui() -> void:
 	_scroll.add_child(_view)
 	_view.link_activated.connect(_on_link)
 
+	# 底部固定操作栏（ui-opt 契约 §4）：vbox 末尾、scroll 之后；scroll 保持
+	# EXPAND_FILL，本区固定屏幕下方不随页面滚动，单手可达
+	_bottom_box = VBoxContainer.new()
+	_bottom_box.add_theme_constant_override("separation", 18)
+	vbox.add_child(_bottom_box)
+
+	# 上下文操作行：每次事件后按 _router.bottom_actions() 重建，空数组时整行隐藏
+	_ctx_row = HBoxContainer.new()
+	_ctx_row.add_theme_constant_override("separation", 14)
+	_ctx_row.visible = false
+	_bottom_box.add_child(_ctx_row)
+
+	# 固定导航行：状态/物品/地图 + 存档 + 自动战斗（原顶部导航行整体下移，逻辑不变）
+	_nav_row = HBoxContainer.new()
+	_nav_row.add_theme_constant_override("separation", 14)
+	_bottom_box.add_child(_nav_row)
+	for label: String in MENU_EVENTS:
+		var btn := Button.new()
+		btn.text = label
+		btn.custom_minimum_size = Vector2(0, 58)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_menu.bind(MENU_EVENTS[label]))
+		_nav_row.add_child(btn)
+	var save_btn := Button.new()
+	save_btn.text = "存档"
+	save_btn.custom_minimum_size = Vector2(0, 58)
+	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	save_btn.pressed.connect(_on_manual_save)
+	_nav_row.add_child(save_btn)
+	_auto_btn = Button.new()
+	_auto_btn.text = "自动战斗"
+	_auto_btn.custom_minimum_size = Vector2(0, 58)
+	_auto_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_auto_btn.pressed.connect(_on_auto_toggle)
+	_nav_row.add_child(_auto_btn)
+
 	# 轻提示（点击太快了 / 存档已保存）。SafeAreaFrame 是容器会接管子节点布局，
 	# 因此 toast 挂在它下面的整幅普通 Control 上：锚点定位保持原视觉位置，
 	# 但相对的是已扣除安全区的区域，底部不再被虚拟导航栏盖住。
@@ -166,8 +206,10 @@ func _build_ui() -> void:
 	_toast.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	# 垂直方向必须显式上生长：默认 END 会把文字向下排到安全区外（桌面甚至出屏）
 	_toast.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_toast.offset_top = -56
-	_toast.offset_bottom = -56
+	# ui-opt 契约 §4（主进程联调补）：导航行下移后底部固定区高约 58+18+58，
+	# toast 上抬到操作区上方，避免「升级了/存档已保存」压在按钮上
+	_toast.offset_top = -150
+	_toast.offset_bottom = -150
 	_toast.add_theme_font_size_override("font_size", 22)
 	_toast.add_theme_color_override("font_color", Color(1, 1, 1))
 	_toast.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
@@ -203,6 +245,35 @@ func _on_menu(event: String) -> void:
 		return
 	_router.handle(event)
 	_after_event()
+
+
+## 底部上下文按钮统一入口（ui-opt 契约 §4）：复用 _on_link 的管线
+## （handle → _after_event），并共用 _too_fast() 点击冷却
+func _dispatch(event: String) -> void:
+	if _too_fast():
+		return
+	_router.handle(event)
+	_after_event()
+
+
+## 重建底部上下文操作行（ui-opt 契约 §4）：清空旧子节点后按
+## _router.bottom_actions()（每项 {"label","event"}）生成按钮，空数组时整行隐藏。
+## 旧按钮先 remove_child 再 queue_free，避免新旧按钮同帧并存导致布局闪动
+func _refresh_ctx_row() -> void:
+	while _ctx_row.get_child_count() > 0:
+		var child := _ctx_row.get_child(0)
+		_ctx_row.remove_child(child)
+		child.queue_free()
+	# 显式标注契约签名类型：bottom_actions() 由 E2b 并行实现，此前调用返回无类型值
+	var actions: Array[Dictionary] = _router.bottom_actions()
+	_ctx_row.visible = not actions.is_empty()
+	for action: Dictionary in actions:
+		var btn := Button.new()
+		btn.text = str(action.get("label", ""))
+		btn.custom_minimum_size = Vector2(0, 58)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_dispatch.bind(str(action.get("event", ""))))
+		_ctx_row.add_child(btn)
 
 
 func _on_manual_save() -> void:
@@ -290,6 +361,7 @@ func _after_event() -> void:
 		_router.needs_save = false
 	_refresh_topbar()
 	_render()
+	_refresh_ctx_row()  # ui-opt 契约 §4：每次事件后重建底部上下文操作行
 
 
 func _save() -> void:
@@ -317,6 +389,8 @@ func _refresh_topbar() -> void:
 	_hp_bar.max_value = _player.max_hp()
 	_hp_bar.value = _player.hp_cur
 	_hp_text.text = "体力 %d/%d" % [_player.hp_cur, _player.max_hp()]
+	_xp_bar.max_value = _player.exp_need()
+	_xp_bar.value = _player.exp_cur
 	_copper_label.text = "铜贝 %d" % _player.copper
 
 

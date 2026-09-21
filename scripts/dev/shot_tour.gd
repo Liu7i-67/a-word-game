@@ -99,6 +99,14 @@ func run(main: Control) -> void:
 	_play(game, "welfare_claim")
 	await _shot("17_welfare")
 
+	# GM 密码盘走查（ui-opt 契约 §3.3）：按 3 个数字键后截图松散键盘，再回场景继续原流程
+	_play(game, "gm_password")
+	_play(game, "gm_pwd:6")
+	_play(game, "gm_pwd:7")
+	_play(game, "gm_pwd:6")
+	await _shot("17b_gm_pad")
+	_play(game, "back_game")
+
 	# 银行
 	_play(game, "goto:nganhong")
 	_play(game, "npc:nganhong:clerk")

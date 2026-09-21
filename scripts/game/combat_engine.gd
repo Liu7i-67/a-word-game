@@ -97,10 +97,11 @@ func retreat_cost() -> int:
 
 
 ## 玩家出手：dmg_mult_pct 为技能倍率（100=普通），prefix 为日志前缀。
-## 伤害 = (atk_range + 宝石 atk) × 士气加成 − 怪 def；幸运一击按 total_lucky 概率触发 ×lucky_mult_pct%。
+## 伤害 = atk_range × 士气加成 − 怪 def（宝石 atk 已并入 atk_range，口径并入 ui-opt 契约 §2.1）；
+## 幸运一击按 total_lucky 概率触发 ×lucky_mult_pct%。
 func _player_strike(player: PlayerCore, dmg_mult_pct: int, prefix: String) -> void:
 	var range_atk := player.atk_range()
-	var raw := player.rng.randi_range(range_atk.x, range_atk.y) + maxi(int(player.gem_bonus().get("atk", 0)), 0)
+	var raw := player.rng.randi_range(range_atk.x, range_atk.y)
 	raw = raw * (100 + maxi(player.momentum, 0) * Rules.combat_momentum_atk_pct_per()) / 100
 	var dmg := maxi(raw - monster_def, 0)
 	var lucky := player.total_lucky() > 0 and player.rng.randi() % 100 < player.total_lucky() * Rules.combat_lucky_pct_per()
@@ -117,7 +118,8 @@ func _player_strike(player: PlayerCore, dmg_mult_pct: int, prefix: String) -> vo
 
 
 ## 怪物出手：敏捷闪避（命中率 = 100% − agi×per%，封顶 dodge_pct_max）→
-## 防御减伤（基础 def + 护甲 + 宝石 def）→ 命中后附加毒伤（毒抗减免，契约 §4.2）。
+## 防御减伤（defense() 已含基础 + 护甲 + 宝石 def，口径并入 ui-opt 契约 §2.1）→
+## 命中后附加毒伤（毒抗减免，契约 §4.2）。
 func _monster_strike(player: PlayerCore, while_drinking: bool) -> void:
 	var hit_pct := 100 - mini(player.total_agility() * Rules.combat_dodge_pct_per_agi(), Rules.combat_dodge_pct_max())
 	if player.rng.randi() % 100 >= hit_pct:
@@ -128,7 +130,7 @@ func _monster_strike(player: PlayerCore, while_drinking: bool) -> void:
 		_trim_log()
 		return
 	var m_hit := player.rng.randi_range(monster_atk_min, monster_atk_max)
-	var pdef := player.defense() + player.armor_def() + maxi(int(player.gem_bonus().get("def", 0)), 0)
+	var pdef := player.defense()
 	var m_dmg := maxi(m_hit - pdef, 0)
 	var dead := player.hurt(m_dmg)
 	if while_drinking:

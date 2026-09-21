@@ -36,6 +36,8 @@ func _run_all() -> void:
 	_test_smith(player)
 	_test_dungeon(player)
 	_test_gm_easteregg(player)
+	_test_exp_buff_stack(player)
+	_test_bottom_actions_and_pad(player)
 	_test_update_checker(player)
 	_test_trade_engine()
 	_test_trade_router(player)
@@ -43,6 +45,7 @@ func _run_all() -> void:
 	_test_life_system(player)
 	_test_item_effects(player)
 	_test_equipment_affixes(player)
+	_test_gem_merge(player)
 	_test_quests(player)
 	await _test_auto_battle(player)
 	_test_drop_equip(player)
@@ -726,7 +729,7 @@ func _test_gm_easteregg(player: PlayerCore) -> void:
 	for d in Rules.gm_password():
 		router.handle("gm_pwd:%s" % d)
 	router.handle("gm_pwd_ok")
-	check(player.count_stack(pill_id) == pill0 + 3, "正确密码加速丹×3 入包")
+	check(player.count_stack(pill_id) == pill0 + 10, "正确密码加速丹×10 入包（丹数 3→10，ui-opt 契约 §2.2）")
 	check(player.equips.size() == eq0 + 1, "正确密码小刀入包")
 	check(router.page.contains("获得装备：小刀"), "领奖页显示小刀")
 	var knife_atk: Array = GameData.get_item(knife_id).get("atk", [])
@@ -738,7 +741,7 @@ func _test_gm_easteregg(player: PlayerCore) -> void:
 	for d in Rules.gm_password():
 		router.handle("gm_pwd:%s" % d)
 	router.handle("gm_pwd_ok")
-	check(player.count_stack(pill_id) == pill0 + 6, "彩蛋可重复触发（丹再+3）")
+	check(player.count_stack(pill_id) == pill0 + 20, "彩蛋可重复触发（丹再+10，丹数 3→10 口径并入）")
 	check(player.equips.size() == eq0 + 2, "彩蛋可重复触发（小刀再+1）")
 
 	# 加速丹：药品页展示 + 使用 → 10 场 ×10
@@ -747,7 +750,7 @@ func _test_gm_easteregg(player: PlayerCore) -> void:
 	check(router.page.contains("经验×10（10场）"), "药品页显示加速丹效果")
 	router.handle("use_drug:%s" % pill_id)
 	check(player.exp_buff_left == 10 and player.exp_buff_mult == 10, "服丹后 10 场 ×10")
-	check(player.count_stack(pill_id) == pill0 + 5, "服丹数量 -1")
+	check(player.count_stack(pill_id) == pill0 + 19, "服丹数量 -1（丹数 3→10 后为 20-1）")
 	router.handle("status")
 	check(router.page.contains("经验加速：×10（剩 10 场）"), "状态页显示加速 buff")
 
@@ -778,12 +781,135 @@ func _test_gm_easteregg(player: PlayerCore) -> void:
 	check(router.combat != null, "进入战斗（战斗用丹用例）")
 	var hp_before := player.hp_cur
 	router.handle("combat_use:%s" % pill_id)
-	check(player.exp_buff_left == 10, "战斗中服丹重新激活至 10 场")
-	check(player.count_stack(pill_id) == pill0 + 4, "战斗中服丹数量 -1")
+	check(player.exp_buff_left == 19, "战斗中服丹叠加至 19 场（9+10，场次叠加口径并入）")
+	check(player.count_stack(pill_id) == pill0 + 18, "战斗中服丹数量 -1（丹数 3→10 后为 20-2）")
 	check(player.hp_cur == hp_before, "战斗中服丹怪物不还手")
 	player.add_copper(1000)
 	router.handle("retreat")
 	check(router.combat == null, "战斗用丹用例撤退清理")
+
+
+# ---------- 5.7d 经验加速丹场次叠加（ui-opt 契约 §2.2） ----------
+
+func _test_exp_buff_stack(player: PlayerCore) -> void:
+	player.new_game("叠丹员", "♂")
+	# 连吃两颗：场次叠加不取大，倍率保持最高
+	player.apply_exp_buff(10, 10)
+	player.apply_exp_buff(10, 10)
+	check(player.exp_buff_left == 20, "连吃两颗加速丹叠加 20 场（场次叠加口径并入）")
+	check(player.exp_buff_mult == 10, "叠加后倍率保持最高 ×10")
+	# 战斗结算消耗 1 场次，返回生效倍率
+	check(player.consume_exp_buff() == 10 and player.exp_buff_left == 19, "消耗 1 场次剩 19 且返回倍率 10")
+	# 低倍率丹：场次继续叠加，倍率不稀释仍取最高
+	player.apply_exp_buff(5, 2)
+	check(player.exp_buff_left == 24 and player.exp_buff_mult == 10, "低倍率丹叠加场次且倍率保持最高")
+
+
+# ---------- 5.7e 底部操作栏上下文 + 页面间距（ui-opt 契约 §3.2/§3.3） ----------
+
+func _test_bottom_actions_and_pad(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("上下文员", "♂")
+	player.rng.seed = 42
+
+	# 规则 1 战斗中：含 攻击/药品/撤退 且事件词合法（未学技能不出攻击术）
+	router.handle("goto:nungcoeng")
+	router.handle("fight:bingji")
+	var in_fight := router.bottom_actions()
+	var fight_events: Array[String] = []
+	for a: Dictionary in in_fight:
+		fight_events.append(String(a.get("event", "")))
+	check(in_fight.size() >= 3, "bottom_actions：战斗中至少 攻击/药品/撤退 三项")
+	check(fight_events.has("attack") and fight_events.has("combat_drug") and fight_events.has("retreat"),
+		"bottom_actions：战斗中含 攻击/药品/撤退 且事件合法")
+	check(not fight_events.has("skill_cast"), "bottom_actions：未学技能不出攻击术")
+
+	# 规则 2 战斗胜利：领取奖励 + 返回游戏
+	router.combat.monster_hp = 1
+	router.combat.monster_def = 0
+	router.handle("attack")
+	check(router.combat.finished and router.combat.won, "bottom_actions：造胜利结算前置成立")
+	var won_acts := router.bottom_actions()
+	check(won_acts.size() == 2 and String(won_acts[0].get("event", "")) == "combat_reward"
+		and String(won_acts[1].get("event", "")) == "combat_leave", "bottom_actions：胜利页=领取奖励+返回游戏")
+	router.handle("combat_leave")
+
+	# 规则 3 商店族：handle("shop") 后 3 项，事件顺序 shop/market/sell_page
+	router.handle("shop")
+	var shop_acts := router.bottom_actions()
+	var shop_events: Array[String] = []
+	for a: Dictionary in shop_acts:
+		shop_events.append(String(a.get("event", "")))
+	check(shop_acts.size() == 3, "bottom_actions：商店族 3 项")
+	check(shop_events[0] == "shop" and shop_events[1] == "market" and shop_events[2] == "sell_page",
+		"bottom_actions：商店族事件 shop/market/sell_page")
+
+	# 规则 4 铁匠族：handle("smith") 后 3 项，事件 smith_enhance/smith_gem/sell_equip_page
+	router.handle("smith")
+	var smith_acts := router.bottom_actions()
+	var smith_events: Array[String] = []
+	for a: Dictionary in smith_acts:
+		smith_events.append(String(a.get("event", "")))
+	check(smith_acts.size() == 3, "bottom_actions：铁匠族 3 项")
+	check(smith_events[0] == "smith_enhance" and smith_events[1] == "smith_gem" and smith_events[2] == "sell_equip_page",
+		"bottom_actions：铁匠族事件 smith_enhance/smith_gem/sell_equip_page")
+
+	# 规则 3/4 主进程联调回归：商店/铁匠/市场首页经 NPC 打开（npc 事件不在命令词表内，
+	# 靠 _npc 置 page_family 进底部操作栏——截图走查发现的首开缺失场景）
+	router.handle("npc:soengdim:merchant")
+	check(router.page_family == "shop" and router.bottom_actions().size() == 3,
+		"bottom_actions：NPC 开商店首页也有商店族三项")
+	router.handle("npc:titzoengpou:smith")
+	check(router.page_family == "smith" and router.bottom_actions().size() == 3,
+		"bottom_actions：NPC 开铁匠首页也有铁匠族三项")
+	router.handle("npc:sicoeng:vendor")
+	check(router.page_family == "shop" and router.bottom_actions().size() == 3,
+		"bottom_actions：NPC 开市场首页也有商店族三项")
+	router.handle("status")
+	check(router.page_family == "" and router.bottom_actions().is_empty(),
+		"bottom_actions：离开家族页后 page_family 复位为空")
+
+	# 规则 5 场景有怪：_goto 后 page_is_scene 置位，首项 event 以 fight: 开头且最多 3 项
+	router.handle("goto:nungcoeng")
+	check(router.page_is_scene, "bottom_actions：_goto 成功渲染后 page_is_scene 置位")
+	var scene_acts := router.bottom_actions()
+	check(not scene_acts.is_empty() and String(scene_acts[0].get("event", "")).begins_with("fight:"),
+		"bottom_actions：场景有怪首项以 fight: 开头")
+	check(scene_acts.size() <= 3, "bottom_actions：场景怪入口最多 3 项")
+
+	# 规则 6 其余：无怪场景与非场景命令页 → 空数组（隐藏）
+	router.handle("goto:zaugun")
+	check(router.bottom_actions().is_empty(), "bottom_actions：无怪场景为空数组")
+	router.handle("status")
+	check(router.bottom_actions().is_empty(), "bottom_actions：非场景命令页为空数组")
+
+	# city_map：goto 链接 + 加宽分隔（相邻 url 间有 　·　）+ 每行入口 ≤3
+	var cmap := Pages.city_map()
+	check(cmap.contains("goto:"), "city_map：含 goto 链接")
+	check(cmap.contains(Pages.WIDE_SEP), "city_map：相邻 url 间存在加宽分隔（ui-opt §3.1）")
+	var max_links := 0
+	for line in cmap.split("\n"):
+		max_links = maxi(max_links, line.count("goto:"))
+	check(max_links <= 3, "city_map：每行入口 ≤3 个")
+
+	# gm_password_page("6")：gm_pwd:1..9 全部 url 齐备 + 大号键位 + 清空/确认在位
+	var pad := Pages.gm_password_page("6")
+	var all_keys := true
+	for d in range(1, 10):
+		if not pad.contains("gm_pwd:%d" % d):
+			all_keys = false
+			break
+	check(all_keys, "gm_password_page：gm_pwd:1..9 全部 url 齐备")
+	check(pad.contains("[font_size=40]　6　[/font_size]"), "gm_password_page：数字键加大且 U+3000 填充")
+	check(pad.contains("gm_pwd:clear") and pad.contains("gm_pwd_ok"), "gm_password_page：清空/确认在位")
+
+	# 加速丹文案报叠加后总量（ui-opt 契约 §3.2）
+	var pill := Rules.gm_exp_pill()
+	player.add_stack(pill, 1)
+	router.handle("use_drug:%s" % pill)
+	check(player.exp_buff_left == 10, "加速丹：服丹后共剩 10 场")
+	check(router.page.contains("叠加后共剩 10 场"), "加速丹文案报叠加后总量（ui-opt §3.2）")
 
 
 # ---------- 5.7c 检查更新（离线：只验页面与事件链路，不发真网络请求） ----------
@@ -1437,6 +1563,40 @@ func _test_equipment_affixes(player: PlayerCore) -> void:
 	var cq := player.copper
 	router.handle("buy_drug:quqibing:1")
 	check(player.count_stack("quqibing") == q0 + 1 and player.copper == cq - 150, "商店买曲奇饼扣款 150")
+
+
+# ---------- 5.14b 宝石属性并入真实属性（ui-opt 契约 §2.1 口径并入） ----------
+
+func _test_gem_merge(player: PlayerCore) -> void:
+	player.new_game("镶宝石", "♂")
+
+	# 红宝石 atk+3 并入攻击区间两端（口径并入：战斗引擎不再对宝石攻击另行加成）
+	var atk0 := player.atk_range()
+	var hat := player.add_equip("cuzhitongkui")
+	player.add_stack("hongbaoshi", 1)
+	check(hat >= 0 and player.socket_gem(hat, "hongbaoshi").get("ok", false), "镶嵌红宝石成功")
+	check(player.atk_range() == Vector2i(atk0.x + 3, atk0.y + 3), "红宝石 atk+3 并入攻击区间两端（口径并入）")
+
+	# 护甲 + 蓝宝石：defense() = 基础 + 护甲 + 宝石 def（口径并入：战斗引擎不再三重相加）
+	var belt := player.add_equip("piyaodai")
+	check(player.equip_armor(belt), "穿戴皮腰带（宝石口径用例）")
+	var dhat := player.add_equip("cuzhitongkui")
+	player.add_stack("lanbaoshi", 1)
+	check(player.socket_gem(dhat, "lanbaoshi").get("ok", false), "镶嵌蓝宝石成功")
+	check(player.defense() == Rules.base_def(player.level) + player.armor_def() + 2,
+		"defense()=基础+护甲+蓝宝石 def+2（口径并入）")
+
+	# 紫水晶 hp+50 并入体力上限；卖出该件后上限回落、体力收紧不越上限（口径并入）
+	var base_max := Rules.max_hp(player.level)
+	var phat := player.add_equip("cuzhitongkui")
+	player.add_stack("zibaoshi", 1)
+	check(player.socket_gem(phat, "zibaoshi").get("ok", false), "镶嵌紫水晶成功")
+	check(player.max_hp() == base_max + 50, "紫水晶 hp+50 并入体力上限（口径并入）")
+	player.hp_cur = player.max_hp()  # 顶到含宝石上限，制造卖出后的越界前提
+	var sold: Dictionary = player.sell_equip(phat)
+	check(not sold.is_empty(), "卖出带紫水晶装备成功")
+	check(player.max_hp() == base_max, "卖出后宝石 hp 上限回落")
+	check(player.hp_cur == player.max_hp() and player.hp_cur <= player.max_hp(), "卖出后体力收紧不越上限（口径并入）")
 
 
 # ---------- 5.15 任务链（安德鲁/西利亚/谜语，契约 plan-v2 §5.5-§5.6） ----------

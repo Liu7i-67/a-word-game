@@ -256,11 +256,13 @@ func exp_need() -> int:
 	return Rules.exp_to_next(level)
 
 
+## 体力上限（口径并入：成长曲线 + 宝石 hp，ui-opt 契约 §2.1）
 func max_hp() -> int:
-	return Rules.max_hp(level)
+	return Rules.max_hp(level) + maxi(int(gem_bonus().get("hp", 0)), 0)
 
 
-## 武器攻击区间（裸身 + 武器×强化倍率；宝石攻击由 gem_bonus 另加，见契约 §4.2）
+## 武器攻击区间（裸身 + 武器×强化倍率 + 宝石 atk 并入区间两端；口径并入 ui-opt 契约 §2.1，
+## 战斗引擎不再对宝石攻击另行加成）
 func atk_range() -> Vector2i:
 	var r := Rules.base_atk(level)
 	var inst := hand_item()
@@ -268,11 +270,13 @@ func atk_range() -> Vector2i:
 		var wa: Array = GameData.get_item(String(inst.get("id", ""))).get("atk", [0, 0])
 		var mult := _enhance_mult(inst)
 		r = Vector2i(r.x + int(round(float(int(wa[0])) * mult)), r.y + int(round(float(int(wa[1])) * mult)))
-	return r
+	var gem_atk := maxi(int(gem_bonus().get("atk", 0)), 0)
+	return Vector2i(r.x + gem_atk, r.y + gem_atk)
 
 
+## 防御（口径并入：基础 + 护甲 + 宝石 def，ui-opt 契约 §2.1）
 func defense() -> int:
-	return Rules.base_def(level)
+	return Rules.base_def(level) + armor_def() + int(gem_bonus().get("def", 0))
 
 
 ## 装备负重：背包 + 全部装备（含宝石重量随装备条目不计，宝石重量走 bag 计量）
@@ -670,6 +674,9 @@ func _remove_equip_at(idx: int) -> void:
 		armor_idx = -1
 	elif armor_idx > idx:
 		armor_idx -= 1
+	# 口径并入（ui-opt 契约 §2.1）：宝石 hp 随装备离场回落，体力越新上限时收紧并广播
+	hp_cur = mini(hp_cur, max_hp())
+	hp_changed.emit(hp_cur, max_hp())
 
 
 ## 悬空/非护甲下标清洗为 -1（读档兜底）
@@ -753,10 +760,11 @@ func exp_mult() -> float:
 
 # ---------- 经验加速丹 buff ----------
 
-## 激活加速：剩余场次取较大值，倍率随最新一颗
+## 激活加速：场次叠加（吃 1 颗=10 场，再吃=20 场……），倍率保持最高（ui-opt 契约 §2.2）
 func apply_exp_buff(battles: int, multiplier: int) -> void:
-	exp_buff_left = maxi(exp_buff_left, maxi(battles, 0))
-	exp_buff_mult = maxi(multiplier, 1)
+	var had := exp_buff_left > 0
+	exp_buff_left += maxi(battles, 0)
+	exp_buff_mult = maxi(maxi(exp_buff_mult, 1) if had else 1, maxi(multiplier, 1))
 
 
 ## 战斗胜利结算时消耗 1 场次，返回生效倍率（未激活返回 1）

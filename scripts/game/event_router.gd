@@ -22,6 +22,16 @@ var _combat_show_self := false
 ## GM 彩蛋密码盘当前输入（仅 UI 会话内临时状态，不入存档）
 var gm_pwd := ""
 
+## ui-opt 契约 §3.2：最近一次 handle() 的命令词（bottom_actions 商店/铁匠族上下文判定用）
+var last_cmd: String = ""
+
+## ui-opt 契约 §3.2：当前页是否为 _goto 成功渲染的场景页（bottom_actions 场景有怪判定用）
+var page_is_scene := false
+
+## ui-opt 契约 §3.2（主进程联调补）：NPC 开店走 npc 事件、不在命令词表内，
+## 故 _npc 渲染商店/铁匠族页时在此标记家族，bottom_actions 与 last_cmd 词表并联判定
+var page_family: String = ""
+
 ## 检查更新结果里的下载入口（update_download 事件用）
 var _update_apk_url := ""
 var _update_html_url := ""
@@ -39,8 +49,11 @@ func open_start_scene() -> void:
 
 func handle(event: String, param: String = "") -> void:
 	input_mode = ""
+	page_is_scene = false  # ui-opt 契约 §3.2：每次分发先复位，_goto 成功渲染场景页时再置位
+	page_family = ""  # ui-opt 契约 §3.2：家族标记同步复位
 	var parts := event.split(":")
 	var cmd := parts[0]
+	last_cmd = cmd  # ui-opt 契约 §3.2：bottom_actions 上下文判定用
 	var arg := parts[1] if parts.size() > 1 else ""
 	var arg2 := parts[2] if parts.size() > 2 else ""
 	match cmd:
@@ -219,6 +232,60 @@ func handle(event: String, param: String = "") -> void:
 			page = Pages.notice_page("这个入口暂时通向虚空……", "back_game", "返回游戏")
 
 
+# ---------- 底部固定操作栏上下文（ui-opt 契约 §3.2，E2a 按此签名调用） ----------
+
+## 商店族命令词表（ui-opt 契约 §3.2 规则 3）
+const SHOP_CMDS := ["shop", "buy_drug", "market", "buy", "sell_page", "sell", "trade_buy", "trade_sell", "rumor"]
+## 铁匠族命令词表（ui-opt 契约 §3.2 规则 4）
+const SMITH_CMDS := ["smith", "smith_enhance", "smith_gem", "sell_equip_page", "sell_equip", "sell_equip_all", "repair_hand", "forge_page", "forge", "alchemy"]
+
+
+## 底部固定操作栏上下文；每项 {"label": String, "event": String}，空数组=隐藏。优先级自上而下命中即返回。
+func bottom_actions() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	# 规则 1：战斗进行中 → 战斗操作组（攻击术仅已学且本场未用时出现）
+	if combat != null and not combat.finished:
+		out.append({"label": "攻击", "event": "attack"})
+		if player.has_skill("attack") and not combat.skill_used_this_fight:
+			out.append({"label": "攻击术", "event": "skill_cast"})
+		out.append({"label": "药品", "event": "combat_drug"})
+		out.append({"label": "撤退", "event": "retreat"})
+		return out
+	# 规则 2：战斗已结束 → 胜利给领奖+返回，其余给返回
+	if combat != null and combat.finished:
+		if combat.won:
+			out.append({"label": "领取奖励", "event": "combat_reward"})
+			out.append({"label": "返回游戏", "event": "combat_leave"})
+		else:
+			out.append({"label": "返回游戏", "event": "back_game"})
+		return out
+	# 规则 3：商店族页面 → 商店/市场/卖货（page_family 兜 NPC 开店入口，主进程联调补）
+	if page_family == "shop" or SHOP_CMDS.has(last_cmd):
+		out.append({"label": "商店", "event": "shop"})
+		out.append({"label": "市场", "event": "market"})
+		out.append({"label": "卖货", "event": "sell_page"})
+		return out
+	# 规则 4：铁匠族页面 → 强化/镶嵌/出售（page_family 兜 NPC 开店入口）
+	if page_family == "smith" or SMITH_CMDS.has(last_cmd):
+		out.append({"label": "强化", "event": "smith_enhance"})
+		out.append({"label": "镶嵌", "event": "smith_gem"})
+		out.append({"label": "出售", "event": "sell_equip_page"})
+		return out
+	# 规则 5：场景页且有怪（按 id 去重、经 has_monster 过滤，最多 3）→ 挑战入口
+	if combat == null and page_is_scene:
+		var seen := {}
+		for m: Dictionary in GameData.get_scene(player.location).get("monsters", []):
+			var mid := String(m.get("id", ""))
+			if seen.has(mid) or not GameData.has_monster(mid):
+				continue
+			seen[mid] = true
+			out.append({"label": "挑战·%s" % String(GameData.get_monster(mid).get("name", mid)), "event": "fight:%s" % mid})
+			if out.size() >= 3:
+				break
+	# 规则 6：其余上下文 → 空数组（隐藏操作栏）
+	return out
+
+
 # ---------- 检查更新（标题页入口；网络经 UpdateChecker，装配在 Main） ----------
 
 func _check_update() -> void:
@@ -282,6 +349,8 @@ func _goto(scene_id: String) -> void:
 		page = Pages.notice_page("那条路走不通……", "back_game", "返回游戏")
 		return
 	combat = null
+	# ui-opt 契约 §3.2：成功渲染场景页路径（含地宫入口等所有走 _goto 的路径）置位
+	page_is_scene = true
 	if scene_id == Rules.dungeon_scene():
 		_enter_dungeon()
 		return
@@ -335,6 +404,7 @@ func _npc(scene_id: String, npc_id: String) -> void:
 			"casino":
 				page = Pages.casino_main()
 			"market":
+				page_family = "shop"  # ui-opt §3.2：NPC 开店无专属命令词，靠家族标记进底部操作栏
 				page = Pages.market_main(player)
 			"teleport":
 				page = Pages.teleport_page(player)
@@ -343,8 +413,10 @@ func _npc(scene_id: String, npc_id: String) -> void:
 			"dungeon":
 				page = Pages.explorer_page(player)
 			"shop":
+				page_family = "shop"
 				page = Pages.shop_page(player)
 			"smith":
+				page_family = "smith"
 				page = Pages.smith_page(player)
 			"trade_market":
 				page = Pages.trade_market_page(player, Trade.port_at(scene_id))
@@ -786,13 +858,13 @@ func _use_drug(id: String) -> void:
 	page = Pages.drug_result(player, msg)
 
 
-## 用药成功后的结果文案：加速丹报 buff 场次，体力药报恢复量
+## 用药成功后的结果文案：加速丹报叠加后总量（ui-opt 契约 §3.2，数值取 player.exp_buff_left），体力药报恢复量
 func _drug_used_msg(id: String) -> String:
 	var def := GameData.get_item(id)
 	if def.has("exp_buff"):
 		var buff: Dictionary = def.get("exp_buff", {})
-		return "你服下了%s，接下来 %d 场战斗，战斗结束后的经验结算×%d。" % [
-			player.item_name(id), int(buff.get("battles", 10)), int(buff.get("multiplier", 10))]
+		return "你服下了%s，经验×%d 再续 %d 场（叠加后共剩 %d 场）。" % [
+			player.item_name(id), int(buff.get("multiplier", 10)), int(buff.get("battles", 10)), player.exp_buff_left]
 	return "你服下了%s，体力恢复到 %d/%d，浑身是劲。" % [player.item_name(id), player.hp_cur, player.max_hp()]
 
 
