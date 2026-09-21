@@ -19,6 +19,10 @@ var needs_save := false
 var combat: CombatEngine = null
 var _combat_show_self := false
 
+## 海战目的港（契约 docs/sail-region-spec.md §1.6）：开航时记 GameData.world_ports[idx]，
+## 胜利抵达或战败时清空；会话态不入存档（中途退出=留在出发港，船费已付）
+var sail_port: Dictionary = {}
+
 ## GM 彩蛋密码盘当前输入（仅 UI 会话内临时状态，不入存档）
 var gm_pwd := ""
 
@@ -72,7 +76,13 @@ func handle(event: String, param: String = "") -> void:
 		"goto":
 			_goto(arg)
 		"map":
-			page = Pages.city_map()
+			# 契约 docs/sail-region-spec.md §1.8：区域地图分流——威尼斯走既有城内地图，
+			# 其余区域走区域地图页；regions 未载/未命中时 region_of_scene 兜底回威尼斯
+			var region := GameData.region_of_scene(player.location)
+			if region.is_empty() or String(region.get("map_kind", "")) == "venice":
+				page = Pages.city_map()
+			else:
+				page = Pages.region_map(player, region)
 		"status":
 			page = Pages.status_page(player)
 		"items":
@@ -141,11 +151,17 @@ func handle(event: String, param: String = "") -> void:
 		"sell_equip_all":
 			_sell_equip_all(arg)
 		"teleport":
-			page = Pages.teleport_page(player)
+			page = Pages.teleport_page(player)  # 契约 docs/sail-region-spec.md §1.10：传送与航海并存恢复
 		"tp":
 			_tp(arg)
-		"sail":
-			page = Pages.sail_page()
+		"sailor":
+			page = Pages.sailor_page(player)
+		"sail_to":
+			_sail_to(arg)
+		"inn":
+			page = Pages.inn_page(player, _npc_by_kind("inn"))
+		"inn_rest":
+			_inn_rest()
 		"dungeon_try":
 			_dungeon_try()
 		"use_drug":
@@ -243,13 +259,15 @@ const SMITH_CMDS := ["smith", "smith_enhance", "smith_gem", "sell_equip_page", "
 ## 底部固定操作栏上下文；每项 {"label": String, "event": String}，空数组=隐藏。优先级自上而下命中即返回。
 func bottom_actions() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	# 规则 1：战斗进行中 → 战斗操作组（攻击术仅已学且本场未用时出现）
+	# 规则 1：战斗进行中 → 战斗操作组（攻击术仅已学且本场未用时出现；
+	# 契约 docs/sail-region-spec.md §1.9：海战不出撤退项）
 	if combat != null and not combat.finished:
 		out.append({"label": "攻击", "event": "attack"})
 		if player.has_skill("attack") and not combat.skill_used_this_fight:
 			out.append({"label": "攻击术", "event": "skill_cast"})
 		out.append({"label": "药品", "event": "combat_drug"})
-		out.append({"label": "撤退", "event": "retreat"})
+		if not combat.at_sea:
+			out.append({"label": "撤退", "event": "retreat"})
 		return out
 	# 规则 2：战斗已结束 → 胜利给领奖+返回，其余给返回
 	if combat != null and combat.finished:
@@ -407,9 +425,11 @@ func _npc(scene_id: String, npc_id: String) -> void:
 				page_family = "shop"  # ui-opt §3.2：NPC 开店无专属命令词，靠家族标记进底部操作栏
 				page = Pages.market_main(player)
 			"teleport":
-				page = Pages.teleport_page(player)
-			"sail":
-				page = Pages.sail_page()
+				page = Pages.teleport_page(player)  # 契约 docs/sail-region-spec.md §1.10：传送与航海并存恢复
+			"sailor":
+				page = Pages.sailor_page(player)  # 契约 docs/sail-region-spec.md §1.6：船主页（航海）
+			"inn":
+				page = Pages.inn_page(player, npc)  # 契约 docs/sail-region-spec.md §1.7
 			"dungeon":
 				page = Pages.explorer_page(player)
 			"shop":
@@ -417,7 +437,7 @@ func _npc(scene_id: String, npc_id: String) -> void:
 				page = Pages.shop_page(player)
 			"smith":
 				page_family = "smith"
-				page = Pages.smith_page(player)
+				page = Pages.smith_page(player, npc)  # sail-region §1.9：外港铁匠按 npc.stock 出售
 			"trade_market":
 				page = Pages.trade_market_page(player, Trade.port_at(scene_id))
 			"tavern_rumor":
@@ -495,8 +515,23 @@ func _attack() -> void:
 		_render_combat("")
 
 
-## 胜利结算：地宫任务怪计战功 + 安德鲁试炼野外击杀计数 + 总线广播 + 胜利页
+## 胜利结算：海战先靠岸目的港 + 地宫任务怪计战功 + 安德鲁试炼野外击杀计数 + 总线广播 + 胜利页
 func _handle_win() -> void:
+	# 海战胜利抵达（契约 docs/sail-region-spec.md §1.6）：先落到目的港场景再渲染，
+	# notice 报告靠岸；随后 combat_reward/combat_leave 既有流程零改动
+	var sea_arrival := ""
+	if combat.at_sea and not sail_port.is_empty():
+		var port: Dictionary = sail_port
+		var arrival := String(port.get("scene", ""))
+		if arrival == "":
+			arrival = String(port.get("id", ""))
+		if GameData.has_scene(arrival):
+			player.set_location(arrival)
+			needs_save = true
+			if bus != null:
+				bus.scene_entered.emit(StringName(arrival))
+		sea_arrival = String(port.get("name", arrival))
+		sail_port = {}
 	if combat.monster_id == Rules.dungeon_monster() and player.location == Rules.dungeon_scene():
 		player.dungeon_add_kill()
 	# 安德鲁试炼（契约 plan-v2 §5.5）：每日 active 期间累计野外击杀（dungeon 不计）
@@ -514,23 +549,31 @@ func _handle_win() -> void:
 			bus.item_obtained.emit(StringName(combat.reward_equip), 1)
 		if combat.level_gained > 0:
 			bus.leveled_up.emit(player.level)
-	page = Pages.win_page(combat, player)
+	if sea_arrival != "":
+		_render_combat("海战获胜！船已靠岸——%s。" % sea_arrival)
+	else:
+		page = Pages.win_page(combat, player)
 
 
-## 战败处理（普通攻击与战斗中用药共用）：清地宫进度 → 回城复活
+## 战败处理（普通攻击与战斗中用药共用）：清海战目的港 + 清地宫进度 → 回城复活
 func _handle_defeat() -> void:
+	sail_port = {}  # 契约 docs/sail-region-spec.md §1.6：战败清空目的港（复活回威尼斯）
 	player.dungeon_clear_progress()
 	var lost := Rules.death_loss(player.copper)
 	player.take_copper(lost)
 	player.heal(Rules.revive_hp(player.max_hp()))
 	player.set_location(Rules.revive_scene())
-	page = Pages.lose_page(combat, lost, String(GameData.get_scene(player.location).get("name", "")))
+	page = Pages.lose_page(combat, lost, String(GameData.get_scene(player.location).get("name", "")), combat.at_sea)  # sail-region §1.6：海战战败文案变体
 	if bus != null:
 		bus.battle_lost.emit(StringName(combat.monster_id))
 		bus.player_died.emit(StringName(combat.monster_id))
 
 
 func _retreat() -> void:
+	# 海战不可撤退（契约 docs/sail-region-spec.md §1.6）：大海上只能迎战
+	if combat != null and combat.at_sea:
+		_render_combat("大海上无处可逃，只能迎战！")
+		return
 	if combat == null or combat.finished:
 		_back_game()
 		return
@@ -991,9 +1034,79 @@ func _combat_use(drug_id: String) -> void:
 	_render_combat("你服下了%s，体力+%d。" % [player.item_name(drug_id), healed])
 
 
-# ---------- 码头 / 传送 ----------
+# ---------- 航海 / 旅店（契约 docs/sail-region-spec.md §1.6-§1.7） ----------
 
-## 传送出海（契约 trade-spec §6）：world 就位后真实扣费跨港；缺失沿用原占位文案
+## 开航 sail_to:<idx>（契约 docs/sail-region-spec.md §1.6）：港口校验 → 扣船费 →
+## 抽海怪进海战。player.location 保持出发港不变，胜利才落到目的港（sail_port 会话态）；
+## 中途退出游戏=留在出发港，船费已付（契约允许）
+func _sail_to(arg: String) -> void:
+	if Trade.port_at(player.location) == "":
+		page = Pages.notice_page("这里不是港口，没有船可开。", "back_game", "返回游戏")
+		return
+	var idx := int(arg)
+	if idx < 0 or idx >= GameData.world_ports.size():
+		page = Pages.sailor_page(player)
+		return
+	var port: Dictionary = GameData.world_ports[idx]
+	if Trade.port_at(player.location) == String(port.get("id", "")):
+		page = Pages.sailor_page(player)
+		return
+	var cost := Rules.sail_cost()
+	if not player.spend_copper(cost):
+		page = Pages.notice_page("船主：出海船费 %d 铜贝都凑不齐，这片海今天就出不去了。" % cost, "sailor", "返回船主页")
+		return
+	var sea_id := _pick_sea_monster()
+	if sea_id == "":
+		# 无海怪可遇（数据缺失兜底）：退还船费，不留死局
+		player.add_copper(cost)
+		page = Pages.sailor_page(player)
+		return
+	needs_save = true
+	combat = CombatEngine.new(sea_id, player)
+	combat.at_sea = true
+	sail_port = port
+	_combat_show_self = false
+	_render_combat("船离了港，风浪里杀出%s——只能迎战！" % combat.monster_name)
+
+
+## 抽海怪（契约 docs/sail-region-spec.md §1.6）：候选=habitat=="sea" 且
+## |level−玩家级|≤3，候选空则取等级最接近者（并列都保留）；player.rng 随机取一
+func _pick_sea_monster() -> String:
+	GameData.ensure_loaded()
+	var candidates: Array[String] = []
+	var nearest: Array[String] = []
+	var nearest_diff := 1 << 30
+	for mid: String in GameData.monsters:
+		var m: Dictionary = GameData.get_monster(mid)
+		if String(m.get("habitat", "")) != "sea":
+			continue
+		var diff := absi(int(m.get("level", 1)) - player.level)
+		if diff <= 3:
+			candidates.append(mid)
+		if diff < nearest_diff:
+			nearest_diff = diff
+			nearest = [mid]
+		elif diff == nearest_diff:
+			nearest.append(mid)
+	var pool := candidates if not candidates.is_empty() else nearest
+	if pool.is_empty():
+		return ""
+	return pool[player.rng.randi() % pool.size()]
+
+
+## 旅店住店（契约 docs/sail-region-spec.md §1.7）：Life.inn_rest 扣费回满，
+## 成功才置 needs_save；结果页由 E2b 的 inn_result 渲染
+func _inn_rest() -> void:
+	var res := Life.inn_rest(player, Rules.inn_cost())
+	if bool(res.get("ok", false)):
+		needs_save = true
+	page = Pages.inn_result(player, res)
+
+
+# ---------- 码头 / 传送（契约 docs/sail-region-spec.md §1.10：传送与航海并存恢复，实现取自 git HEAD 9de997a） ----------
+
+## 传送出海（契约 trade-spec §6；sail-region §1.10 并存恢复）：world 就位后真实扣费
+## 跨港安全直达；缺失沿用原占位文案。航海（sail_to）为风险备选，两者并存
 func _tp(arg: String) -> void:
 	var idx := int(arg)
 	if GameData.world_ports.is_empty():

@@ -1,5 +1,5 @@
 {
-  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。本轮增补(扩展契约§3.4)：economy.repair_cost_per_point=铁匠修理单价；combat.dungeon_*=地宫挑战(击杀目标/时限/通关奖励)。本轮增补(贸易契约§1-§7)：trade.*=港口定价(特产折扣85%/热门倍率180%/每港每日热门2个)；teleport.cost_copper=跨港传送船票铜贝价(文案仍写10银，cost_silver仅作展示)；economy.rumor_cost=酒保打听行情一次的价钱；economy.equip_sell_ratio_pct=装备回收购价为基准价的百分比。本轮增补(交互优化)：combat.auto_stop_hp_pct=自动战斗体力终止阈值(百分比，低于即停)；ui.auto_tick_ms=自动战斗每步间隔(模拟人手速)。本轮增补(内容契约plan-v2§2.4)：life.*=生活系统，体力/打坐/钓鱼/种田/潜水数值✅物品文案硬证据(体力宝80000/打坐野球草人/小鱼活饵/牧草种子/潜水海皇)，阈值与权重表为🔍；smith.*=装备强化上限与铜贝价(强化后绑定✅龙泉水文案)、alchemy炼金兑换配方🔍；quest.*=安德鲁试炼/西利亚海皇任务/每日谜语(🔍玩法推断，谜面为复刻自拟)；combat 新增 momentum_*/dodge_*/lucky_*/skill_* 字段=战斗扩展(士气/闪避/幸运一击/攻击术，🔍七件套同构推断)。",
+  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。本轮增补(扩展契约§3.4)：economy.repair_cost_per_point=铁匠修理单价；combat.dungeon_*=地宫挑战(击杀目标/时限/通关奖励)。本轮增补(贸易契约§1-§7)：trade.*=港口定价(特产折扣85%/热门倍率180%/每港每日热门2个)；teleport.cost_copper=跨港传送船票铜贝价(文案仍写10银，cost_silver仅作展示)；economy.rumor_cost=酒保打听行情一次的价钱；economy.equip_sell_ratio_pct=装备回收购价为基准价的百分比。本轮增补(交互优化)：combat.auto_stop_hp_pct=自动战斗体力终止阈值(百分比，低于即停)；ui.auto_tick_ms=自动战斗每步间隔(模拟人手速)。本轮增补(内容契约plan-v2§2.4)：life.*=生活系统，体力/打坐/钓鱼/种田/潜水数值✅物品文案硬证据(体力宝80000/打坐野球草人/小鱼活饵/牧草种子/潜水海皇)，阈值与权重表为🔍；smith.*=装备强化上限与铜贝价(强化后绑定✅龙泉水文案)、alchemy炼金兑换配方🔍；quest.*=安德鲁试炼/西利亚海皇任务/每日谜语(🔍玩法推断，谜面为复刻自拟)；combat 新增 momentum_*/dodge_*/lucky_*/skill_* 字段=战斗扩展(士气/闪避/幸运一击/攻击术，🔍七件套同构推断)。本轮增补(出海航行+区域世界契约§1.6/§1.7)：economy.sail_cost=出海船费(退役跨港传送后由航海取代)；economy.inn_cost=旅店住店恢复费(生活体力+HP回满)。",
   "start": {
     "scene": "zaugun",
     "level": 1,
@@ -116,7 +116,9 @@
     "sell_ratio_pct": 50,
     "repair_cost_per_point": 2,
     "rumor_cost": 20,
-    "equip_sell_ratio_pct": 40
+    "equip_sell_ratio_pct": 40,
+    "sail_cost": 1000,
+    "inn_cost": 100
   },
   "teleport": {
     "cost_silver": 10,

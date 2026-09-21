@@ -1,5 +1,5 @@
 {
-  "_doc": "世界港口表（贸易契约§2）。ports[i]：id=港标识（其余9港的同id场景在 scenes.json，on_map=false）；name=港名；region=所属海域（地中海/北海/非洲）；scene=该港市场场景id，venice 复用既有威尼斯市场 sicoeng；specialties=本港特产贸易品（买入享 trade.specialty_discount_pct 折扣）；demand_pool=本港热门池（每日按 day+港id 为种子从中抽 trade.hot_per_port 个为当日抢手货，单价乘 trade.hot_multiplier_pct）。specialties/demand_pool 里的物品 id 必须是 items.json 中 type=goods 的可交易贸易品。",
+  "_doc": "世界港口表（贸易契约§2）。ports[i]：id=港标识（其余9港的同id场景在 scenes.json，on_map=false）；name=港名；region=所属海域（地中海/北海/非洲）；scene=该港市场场景id，venice 复用既有威尼斯市场 sicoeng；specialties=本港特产贸易品（买入享 trade.specialty_discount_pct 折扣）；demand_pool=本港热门池（每日按 day+港id 为种子从中抽 trade.hot_per_port 个为当日抢手货，单价乘 trade.hot_multiplier_pct）。specialties/demand_pool 里的物品 id 必须是 items.json 中 type=goods 的可交易贸易品。主进程裁决(出海航行§1.1)：新增与 ports 平级的 regions 数组（10 区，顺序=区域地图页顺序）；map_kind=venice 走既有 city_map（scenes 留空，兜底归威尼斯），map_kind=area 携带 2 个野外场景 id；port_scene=该区港口场景，区域铁匠装备档与怪物梯度按 §1.1 梯度表锁定。",
   "ports": [
     {"id": "venice", "name": "威尼斯", "region": "地中海", "scene": "sicoeng",
      "specialties": ["putaojiu", "ganyouyou"], "demand_pool": ["sichou", "xiangliao", "xiangshui", "taoqi"]},
@@ -21,5 +21,27 @@
      "specialties": ["maopi", "haiyan"], "demand_pool": ["botejiu", "taoqi", "dalishi", "putaojiu"]},
     {"id": "laguzha", "name": "拉古扎", "region": "地中海", "scene": "laguzha",
      "specialties": ["haiyan"], "demand_pool": ["sichou", "taoqi", "xiangshui", "xiangliao"]}
+  ],
+  "regions": [
+    {"id": "venice", "name": "威尼斯", "map_kind": "venice", "map_name": "威尼斯城内地图", "port_scene": "sicoeng",
+     "desc": "亚得里亚海的女王，运河与贡多拉交织成的水上迷宫。全城的繁华都从市场与码头之间流过。", "scenes": []},
+    {"id": "laguzha", "name": "拉古扎", "map_kind": "area", "map_name": "拉古扎沿岸地图", "port_scene": "laguzha",
+     "desc": "亚得里亚东岸的红顶小城，盐田与商路养出一城精明的拉古扎人。城后山丘上还立着旧日的瞭望塔。", "scenes": ["laguzha_haian", "laguzha_shanqiu"]},
+    {"id": "risiben", "name": "里斯本", "map_kind": "area", "map_name": "里斯本沿岸地图", "port_scene": "risiben",
+     "desc": "特茹河口的风帆之都，航海家们从这里出发去追寻世界的另一头。贝伦塔下永远停着待发的商船。", "scenes": ["risiben_jiaoqu", "risiben_haijiao"]},
+    {"id": "masa", "name": "马赛", "map_kind": "area", "map_name": "马赛沿岸地图", "port_scene": "masa",
+     "desc": "崖壁与海湾相拥的旧港，采石场的凿声敲了上千年。普罗旺斯的日光把整座城晒成暖白色。", "scenes": ["masa_shidi", "masa_yakuang"]},
+    {"id": "tunisi", "name": "突尼斯", "map_kind": "area", "map_name": "突尼斯沿岸地图", "port_scene": "tunisi",
+     "desc": "白色之城枕着地中海，驼铃从麦地那的窄巷一直摇进撒哈拉。绿洲与沙海在此一线相隔。", "scenes": ["tunisi_luzhou", "tunisi_shamo"]},
+    {"id": "aerjier", "name": "阿尔及尔", "map_kind": "area", "map_name": "阿尔及尔沿岸地图", "port_scene": "aerjier",
+     "desc": "白色阶地城层层叠上山坡，港湾里帆樯与旧日海盗的传说一样多。毛皮与盐商在椰枣树影下讨价还价。", "scenes": ["aerjier_haiwan", "aerjier_yaolei"]},
+    {"id": "yalishanda", "name": "亚历山大", "map_kind": "area", "map_name": "亚历山大沿岸地图", "port_scene": "yalishanda",
+     "desc": "法罗斯灯塔的余晖照着两千年的书卷气，沙丘一层层往城下压。古墓与大图书馆共享同一片海风。", "scenes": ["yalishanda_shaqiu", "yalishanda_gumu"]},
+    {"id": "yadian", "name": "雅典", "map_kind": "area", "map_name": "雅典沿岸地图", "port_scene": "yadian",
+     "desc": "卫城的大理石柱还撑着半个天空，哲人们在橄榄树下辩论不休。山林与神殿遗迹是雅典人的后花园。", "scenes": ["yadian_shanlin", "yadian_shendian"]},
+    {"id": "yisitanbao", "name": "伊斯坦堡", "map_kind": "area", "map_name": "伊斯坦堡沿岸地图", "port_scene": "yisitanbao",
+     "desc": "海峡要冲上的商埠，驼队与帆船在这里换装接力。城外要塞的旗常年不落，雷石炮锈了也不敢撤。", "scenes": ["yisitanbao_chengjiao", "yisitanbao_yaolei"]},
+    {"id": "yisitanbuer", "name": "伊斯坦布尔", "map_kind": "area", "map_name": "伊斯坦布尔沿岸地图", "port_scene": "yisitanbuer",
+     "desc": "旧皇宫的穹顶下藏着帝国最后的秘术，近卫的铠甲擦得锃亮。这里是商路的尽头，也是传闻的源头。", "scenes": ["yisitanbuer_jiaoqu", "yisitanbuer_huanggong"]}
   ]
 }

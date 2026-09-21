@@ -508,7 +508,8 @@ static func combat_page(engine: CombatEngine, player: PlayerCore, show_self: boo
 	var lines: Array[String] = []
 	if notice != "":
 		lines.append("[color=red]%s[/color]" % esc(notice))
-	lines.append(header("敌方属性"))
+	# 契约 docs/sail-region-spec.md §1.6：海战标题行加「海战」标识
+	lines.append(header("海战 · 敌方属性" if engine.at_sea else "敌方属性"))
 	lines.append("名称：%s" % esc(engine.monster_name))
 	lines.append("等级：%d" % engine.monster_level)
 	lines.append("攻击：%d-%d" % [engine.monster_atk_min, engine.monster_atk_max])
@@ -519,8 +520,10 @@ static func combat_page(engine: CombatEngine, player: PlayerCore, show_self: boo
 		link("attack", "攻击"),
 		link("view", "查看"),
 		link("combat_drug", "药品"),
-		link("retreat", "撤退(%d铜贝)" % engine.retreat_cost()),
 	]
+	# 契约 docs/sail-region-spec.md §1.6/§1.9：海战无处可逃，不出撤退链接
+	if not engine.at_sea:
+		actions.append(link("retreat", "撤退(%d铜贝)" % engine.retreat_cost()))
 	# 攻击术（契约 plan-v2 §5：已学 attack 且本场未用时显示）
 	if player.has_skill("attack") and not engine.skill_used_this_fight:
 		actions.append(link("skill_cast", "攻击术(%d体力)" % Rules.combat_skill_stamina()))
@@ -623,12 +626,16 @@ static func drug_effect_text(def: Dictionary) -> String:
 	return "疗效+%d" % int(def.get("heal", 0))
 
 
-static func lose_page(engine: CombatEngine, lost_copper: int, revive_scene_name: String) -> String:
+static func lose_page(engine: CombatEngine, lost_copper: int, revive_scene_name: String, at_sea: bool = false) -> String:
 	var lines: Array[String] = []
 	lines.append(header("战斗失败"))
 	lines.append("你被%s狠狠教训了一顿!" % esc(engine.monster_name))
 	lines.append("丢失铜贝:%d" % lost_copper)
-	lines.append("被好心人救回了城里。")
+	# 契约 docs/sail-region-spec.md §1.6：海战战败文案变体（默认保留原文案）
+	if at_sea:
+		lines.append("你被路过的商船救起……")
+	else:
+		lines.append("被好心人救回了城里。")
 	lines.append(dim("（现在位置：%s）" % esc(revive_scene_name)))
 	lines.append("")
 	lines.append("[center]%s   %s[/center]" % [link("combat_leave", "撤退"), link("combat_leave", "继续")])
@@ -1080,9 +1087,18 @@ static func shop_result(player: PlayerCore, msg: String) -> String:
 	return join_lines(lines)
 
 
-static func smith_page(player: PlayerCore) -> String:
+static func smith_page(player: PlayerCore, npc: Dictionary = {}) -> String:
+	# 契约 docs/sail-region-spec.md §1.3/§1.9：外港铁匠 npc 带 stock 时只列 stock 档位
+	# （升序已保证），header 用所在区域名；缺省（威尼斯无 stock）保持现状全量在售
+	var stock: Array = npc.get("stock", [])
+	var title := "威尼斯铁匠铺"
+	if not (stock as Array).is_empty():
+		var place := String(GameData.region_of_scene(player.location).get("name", ""))
+		if place == "":
+			place = String(npc.get("name", "外港"))
+		title = "%s · 铁匠铺" % place
 	var lines: Array[String] = []
-	lines.append(header("威尼斯铁匠铺"))
+	lines.append(header(title))
 	lines.append("铁匠：炉火正旺，修修补补、打刀造剑，都是我的拿手活。")
 	var hand := player.hand_item()
 	if hand.is_empty():
@@ -1095,11 +1111,20 @@ static func smith_page(player: PlayerCore) -> String:
 	lines.append("[center]%s   %s   %s[/center]" % [
 		link("repair_hand", "修理手持"), link("forge_page", "打造装备"), link("smith_enhance", "强化装备")])
 	lines.append("[center]%s   %s[/center]" % [link("smith_gem", "宝石镶嵌"), link("sell_equip_page", "出售装备")])
-	# 契约 plan-v2 §2.1：price>0 的装备在铁匠处在售
+	# 在售清单：stock 页只列 stock；缺省=全量 price>0 装备（契约 plan-v2 §2.1）
+	var sale_ids: Array[String] = []
+	if (stock as Array).is_empty():
+		for id: String in GameData.items:
+			var def_all := GameData.get_item(id)
+			if String(def_all.get("type", "")) == "equip" and int(def_all.get("price", 0)) > 0:
+				sale_ids.append(id)
+	else:
+		for sid: Variant in stock:
+			sale_ids.append(String(sid))
 	var on_sale := 0
-	for id: String in GameData.items:
+	for id: String in sale_ids:
 		var def := GameData.get_item(id)
-		if String(def.get("type", "")) != "equip" or int(def.get("price", 0)) <= 0:
+		if def.is_empty() or String(def.get("type", "")) != "equip" or int(def.get("price", 0)) <= 0:
 			continue
 		on_sale += 1
 		if on_sale == 1:
@@ -1175,10 +1200,36 @@ static func _forge_ready(player: PlayerCore, id: String) -> bool:
 	return true
 
 
-# ---------- 码头 / 传送 ----------
+# ---------- 航海 / 旅店 / 区域地图（契约 docs/sail-region-spec.md §1.6-§1.8） ----------
+
+## 船主页（契约 docs/sail-region-spec.md §1.6：航海取代传送）：header=当前港名·船主，
+## 列出 10 港——当前港标「当前所在」不可选，其余 sail_to:<idx>（world_ports 下标）+ 船费
+static func sailor_page(player: PlayerCore) -> String:
+	var current := Trade.port_at(player.location)
+	var current_name := Trade.port_name(current)
+	if current_name == "" or current_name == current:
+		current_name = String(GameData.get_scene(player.location).get("name", "威尼斯"))
+	var lines: Array[String] = []
+	lines.append(header("%s · 船主" % current_name))
+	for i in GameData.world_ports.size():
+		var port: Dictionary = GameData.world_ports[i]
+		var label := "%s（%s）" % [String(port.get("name", port.get("id", ""))), String(port.get("region", ""))]
+		if String(port.get("id", "")) == current:
+			lines.append("▉%s（当前所在）" % esc(label))
+		else:
+			lines.append("▉%s  %s" % [link("sail_to:%d" % i, label), dim("船费 %d 铜贝" % Rules.sail_cost())])
+	lines.append("")
+	lines.append(dim("海上不太平，航行途中必遇一场海战"))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+# ---------- 码头 / 传送（契约 docs/sail-region-spec.md §1.10：传送与航海并存恢复，实现取自 git HEAD 9de997a） ----------
 
 static func teleport_page(player: PlayerCore) -> String:
-	# 契约 trade-spec §6：world.json 就位后按大世界实况呈现（区域/10 港/当前所在）
+	# 契约 trade-spec §6：world.json 就位后按大世界实况呈现（区域/10 港/当前所在）；
+	# sail-region §1.10：传送安全直达，航海（必遇海战、有战利品）为其风险备选，两者并存
 	if not GameData.world_ports.is_empty():
 		return _teleport_page_world(player)
 	var lines: Array[String] = []
@@ -1190,6 +1241,8 @@ static func teleport_page(player: PlayerCore) -> String:
 			lines.append("▉%s（当前所在）" % esc(port))
 		else:
 			lines.append("▉%s" % link("tp:%d" % i, "%s(%d银)" % [port, Rules.teleport_cost_silver()]))
+	lines.append("")
+	lines.append(dim("传送安全直达；乘船更冒险，但海战有战利品"))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "返回码头"))
 	return join_lines(lines)
@@ -1214,11 +1267,13 @@ static func _teleport_page_world(player: PlayerCore) -> String:
 		else:
 			lines.append("▉%s" % link("tp:%d" % i, "%s(%d银)" % [port_name, Rules.teleport_cost_silver()]))
 	lines.append("")
+	lines.append(dim("传送安全直达；乘船更冒险，但海战有战利品"))
+	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "返回码头"))
 	return join_lines(lines)
 
 
-## 传送到达提示页（契约 §6：成功 → goto 该港场景 + 船票提示）
+## 传送到达提示页（契约 trade-spec §6：成功 → 扣费直达该港场景 + 船票提示；sail-region §1.10 并存恢复）
 static func tp_arrival_page(port_name: String, cost_copper: int) -> String:
 	var lines: Array[String] = []
 	lines.append(header("%s · 码头" % port_name))
@@ -1226,6 +1281,108 @@ static func tp_arrival_page(port_name: String, cost_copper: int) -> String:
 	lines.append("船老板：到了，%s到了！下船当心脚滑，码头上小心扒手。" % port_name)
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "上岸"))
+	return join_lines(lines)
+
+
+static func _is_current_port(player: PlayerCore, port: String) -> bool:
+	return port == "威尼斯" and GameData.has_scene(player.location)
+
+
+## 区域地图（契约 docs/sail-region-spec.md §1.8）：header=map_name + desc(dim) +
+## 「地点」港口+scenes 走 goto（WIDE_SEP、3/行）+「特色人物」港口 NPC
+## （sailor/inn/smith 与带 lines 的 flavor，逐个标注身份）+ 尾部大世界链接
+static func region_map(player: PlayerCore, region: Dictionary) -> String:
+	var port_scene := String(region.get("port_scene", ""))
+	var lines: Array[String] = []
+	lines.append(header(String(region.get("map_name", region.get("name", "")))))
+	var desc := String(region.get("desc", ""))
+	if desc != "":
+		lines.append(dim(desc))
+	lines.append("")
+	lines.append(header("地点"))
+	var place_ids: Array[String] = []
+	if port_scene != "" and GameData.has_scene(port_scene):
+		place_ids.append(port_scene)
+	for member: Variant in region.get("scenes", []):
+		var sid := String(member)
+		if sid != port_scene and GameData.has_scene(sid):
+			place_ids.append(sid)
+	var rows: Array[String] = []
+	var row: Array[String] = []
+	for pid: String in place_ids:
+		var scene := GameData.get_scene(pid)
+		var label := String(scene.get("short", ""))
+		if label == "":
+			label = String(scene.get("name", pid))
+		if pid == player.location:
+			label += "（当前所在）"
+		row.append(link("goto:%s" % pid, label))
+		if row.size() >= 3:
+			rows.append(WIDE_SEP.join(PackedStringArray(row)))
+			row = []
+	if not row.is_empty():
+		rows.append(WIDE_SEP.join(PackedStringArray(row)))
+	for i in rows.size():
+		if i > 0:
+			lines.append("")
+		lines.append(rows[i])
+	lines.append("")
+	lines.append(header("特色人物"))
+	var folks: Array[String] = []
+	for npc: Dictionary in GameData.get_scene(port_scene).get("npcs", []):
+		var role := ""
+		match String(npc.get("kind", "")):
+			"sailor":
+				role = "船主"
+			"inn":
+				role = "旅店"
+			"smith":
+				role = "铁匠"
+			"flavor":
+				if not (npc.get("lines", []) as Array).is_empty():
+					role = "当地"
+		if role == "":
+			continue
+		var nm := String(npc.get("name", ""))
+		# 身份与名字同名时（如 npc 名就叫「船主」）不重复标注
+		var label := nm if nm == role else "%s（%s）" % [nm, role]
+		folks.append(link("npc:%s:%s" % [port_scene, String(npc.get("id", ""))], label))
+	if folks.is_empty():
+		lines.append(dim("（此港暂时没什么有名有姓的人物。）"))
+	else:
+		lines.append(SEP.join(PackedStringArray(folks)))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("worldmap", "大世界"))
+	return join_lines(lines)
+
+
+## 旅店页（契约 docs/sail-region-spec.md §1.7）：老板娘台词套 {昵称} 替换
+## （flavor 页先例）+ 房费与收益说明 + 开房休息
+static func inn_page(player: PlayerCore, npc: Dictionary) -> String:
+	var lines: Array[String] = []
+	lines.append(header(String(npc.get("name", "旅店"))))
+	for line: String in npc.get("lines", []):
+		lines.append(esc(npc_line(line, player)))
+	lines.append("")
+	lines.append("房费 %d 铜贝一晚。开间房睡一觉，生活体力和体力全都回满。" % Rules.inn_cost())
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("inn_rest", "开房休息"))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+## 住店结果页（契约 docs/sail-region-spec.md §1.7）：成功显示恢复文案，失败显示 msg
+static func inn_result(player: PlayerCore, res: Dictionary) -> String:
+	var lines: Array[String] = []
+	lines.append(header("旅店"))
+	lines.append(esc(String(res.get("msg", "掌柜的摆了摆手，让你改日再来。"))))
+	if bool(res.get("ok", false)):
+		lines.append("生活体力：%d/%d  体力：%d/%d" % [
+			player.stamina, player.max_stamina(), player.hp_cur, player.max_hp()])
+	lines.append("铜贝：%d" % player.copper)
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
 	return join_lines(lines)
 
 
@@ -1329,14 +1486,6 @@ static func sell_equip_page(player: PlayerCore, notice: String = "") -> String:
 	lines.append("")
 	lines.append("[center]%s   %s[/center]" % [link("smith", "返回铁匠铺"), link("back_game", "返回游戏")])
 	return join_lines(lines)
-
-
-static func _is_current_port(player: PlayerCore, port: String) -> bool:
-	return port == "威尼斯" and GameData.has_scene(player.location)
-
-
-static func sail_page() -> String:
-	return notice_page("威尼斯码头：　　　　　　暂未开发区域，请耐心等待", "back_game", "返回码头")
 
 
 static func explorer_page(player: PlayerCore) -> String:
@@ -1572,6 +1721,8 @@ static func worldmap_page(player: PlayerCore) -> String:
 			lines.append(dim(flavor + "。"))
 	lines.append("")
 	lines.append("地宫须由北城门的探险官带领进入；城区街坊见「城内地图」。")
+	# 契约 docs/sail-region-spec.md §1.8：大世界保持只读指路，行尾提示区域地图入口
+	lines.append(dim("在各地港口点「地图」查看当地区域地图。"))
 	lines.append("[center]%s[/center]" % link("map", "城内地图"))
 	lines.append("")
 	lines.append(footer())
@@ -1601,6 +1752,9 @@ static func tavern_page(scene: Dictionary, player: PlayerCore) -> String:
 		lines.append(header("店里还有"))
 		lines.append(SEP.join(others))
 	lines.append(dim("朗姆酒气与烤鱼香里，各国水手把远方的传闻搅在一起。"))
+	# 契约 docs/sail-region-spec.md §1.7：威尼斯酒馆尾部住店恢复入口（外港由旅店 NPC 承担）
+	lines.append(dim("楼上还有干净的客房：住一晚 %d 铜贝，醒来生活体力和体力全都回满。" % Rules.inn_cost()))
+	lines.append("[center]%s[/center]" % link("inn_rest", "住店恢复"))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "返回"))
 	return join_lines(lines)

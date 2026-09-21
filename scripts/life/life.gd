@@ -62,6 +62,16 @@ static func dive(player: PlayerCore) -> Dictionary:
 	return {"ok": true, "msg": "你从海底捞起了%s！" % player.item_name(roll), "item_id": roll, "monster_id": ""}
 
 
+## 旅店住店（契约 docs/sail-region-spec.md §1.7）：扣 cost 铜贝；成功则生活体力回满、
+## HP 回满（heal 内部 hp_changed 通知页面刷新）；余额不足给契约语气文案。返回 {ok, msg}
+static func inn_rest(player: PlayerCore, cost: int) -> Dictionary:
+	if not player.spend_copper(cost):
+		return {"ok": false, "msg": "房费 %d 铜贝都拿不出来，老板娘把钥匙又挂了回去。" % cost}
+	player.stamina = player.max_stamina()
+	player.heal(player.max_hp())
+	return {"ok": true, "msg": "你开了间房，美美睡了一觉。生活体力和体力全都回满了！"}
+
+
 ## 按权重表抽一个 id（w=权重%，契约要求各表合计=100；此处按总和归一容错）
 static func _draw_weighted(player: PlayerCore, table: Array) -> String:
 	var total := 0

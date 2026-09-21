@@ -1,5 +1,5 @@
 {
-  "_doc": "物品/装备表。华丽弯刀数据为文档✅；小金丝藤仅知名称与暴率✅，属性为🔍推断补全；商品价格✅(26/31铜贝)。卖价规则（主进程裁决）：贸易品（world.json 各港引用集合）由 Trade 引擎按港定价；非贸易 goods 的 sell_price 字段=固定回收价（材料 buy=2×sell 沿用扩展契约§3）；其余兜底为买价50%。装备 price=铁匠回炉基准价，回收价=price×economy.equip_sell_ratio_pct。本轮增补(内容契约plan-v2§2.1)：新增20件原版物品(desc✅stuff表原文)、宝石4种(type=gem，bonus词条，来源=炼金兑换+矿洞怪掉落)、渔获/牧草5种(goods材料，sell_price只卖不买)与海皇碎片(任务物品，不可卖不可用)；equip 新增可选 slot/agility/lucky/poison_res/slots 字段，armor 用 def 替代 atk；type=item 为功能道具(effect 对象，kind 全集见契约)；tili_bao/shuangbei_jingyanka/huanyuan_ka/jineng_shu/longquanshui/yufu_libao price=0 不进商店。主进程裁决补全(装备曲线)：新增高阶装备4件(玄铁重剑L17/玄铁甲L18/暗鳞巨刃L20/领主之刃L22，atk按 min≈5.2L、max≈8.9L 锚定 dahuandao L15=79-134)，forge 材料全部取自现有材料表，price/forge铜贝沿用现有梯度(12k→16k/18k/24k/32k)。",
+  "_doc": "物品/装备表。华丽弯刀数据为文档✅；小金丝藤仅知名称与暴率✅，属性为🔍推断补全；商品价格✅(26/31铜贝)。卖价规则（主进程裁决）：贸易品（world.json 各港引用集合）由 Trade 引擎按港定价；非贸易 goods 的 sell_price 字段=固定回收价（材料 buy=2×sell 沿用扩展契约§3）；其余兜底为买价50%。装备 price=铁匠回炉基准价，回收价=price×economy.equip_sell_ratio_pct。本轮增补(内容契约plan-v2§2.1)：新增20件原版物品(desc✅stuff表原文)、宝石4种(type=gem，bonus词条，来源=炼金兑换+矿洞怪掉落)、渔获/牧草5种(goods材料，sell_price只卖不买)与海皇碎片(任务物品，不可卖不可用)；equip 新增可选 slot/agility/lucky/poison_res/slots 字段，armor 用 def 替代 atk；type=item 为功能道具(effect 对象，kind 全集见契约)；tili_bao/shuangbei_jingyanka/huanyuan_ka/jineng_shu/longquanshui/yufu_libao price=0 不进商店。主进程裁决补全(装备曲线)：新增高阶装备4件(玄铁重剑L17/玄铁甲L18/暗鳞巨刃L20/领主之刃L22，atk按 min≈5.2L、max≈8.9L 锚定 dahuandao L15=79-134)，forge 材料全部取自现有材料表，price/forge铜贝沿用现有梯度(12k→16k/18k/24k/32k)。主进程裁决(出海航行§1.5)：新增 L24/L26 高阶装备4件(龙牙刃/龙鳞甲/凤凰杖/圣殿重铠，atk/def 逐字锁定契约，price 42k/46k/56k/60k，weight 8-12，stack 1)，供伊斯坦堡(≤24)与伊斯坦布尔(全部)铁匠档位开放。",
   "items": {
     "hualiwandao1": {
       "name": "华丽弯刀（1级）",
@@ -810,6 +810,62 @@
       "price": 32000,
       "stack": 1,
       "forge": {"materials": {"shanzei_lingpai": 2, "xuantie": 5}, "copper": 12000}
+    },
+    "longya_ren": {
+      "name": "龙牙刃",
+      "type": "equip",
+      "desc": "以远古海龙的獠牙磨成的弯刃，刃口泛着淡淡青光，出鞘时隐有龙吟低回。",
+      "req_level": 24,
+      "quality": "史诗",
+      "tradeable": true,
+      "weight": 8,
+      "atk": [124, 210],
+      "durability": 400,
+      "price": 42000,
+      "stack": 1
+    },
+    "longlin_jia": {
+      "name": "龙鳞甲",
+      "type": "equip",
+      "desc": "海龙褪下的鳞片缀成的软甲，鳞光流转如活物，刀斧加身只当挠痒。",
+      "req_level": 24,
+      "quality": "史诗",
+      "slot": "armor",
+      "tradeable": true,
+      "weight": 10,
+      "def": 34,
+      "slots": 1,
+      "durability": 400,
+      "price": 46000,
+      "stack": 1
+    },
+    "fenghuang_zhang": {
+      "name": "凤凰杖",
+      "type": "equip",
+      "desc": "杖头镶着一枚浴火不熄的凤羽石，挥动时暖流涌动，寒冬里也能烤化霜雪。",
+      "req_level": 26,
+      "quality": "史诗",
+      "tradeable": true,
+      "weight": 9,
+      "atk": [134, 228],
+      "durability": 400,
+      "price": 56000,
+      "stack": 1
+    },
+    "shengdian_zhongkai": {
+      "name": "圣殿重铠",
+      "type": "equip",
+      "desc": "旧神殿祭司世代守护的重铠，胸口的圣徽历经战火仍纤尘不染，穿上便觉心安。",
+      "req_level": 26,
+      "quality": "史诗",
+      "slot": "armor",
+      "tradeable": true,
+      "weight": 12,
+      "def": 38,
+      "slots": 1,
+      "durability": 400,
+      "price": 60000,
+      "stack": 1
     }
   }
 }

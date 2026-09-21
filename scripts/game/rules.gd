@@ -97,6 +97,16 @@ static func teleport_cost_copper() -> int:
 	return int(section("teleport").get("cost_copper", 1000))
 
 
+## 出海船费（契约 docs/sail-region-spec.md §1.6，economy.sail_cost）
+static func sail_cost() -> int:
+	return maxi(int(section("economy").get("sail_cost", 1000)), 0)
+
+
+## 旅店住店费（契约 docs/sail-region-spec.md §1.7，economy.inn_cost）
+static func inn_cost() -> int:
+	return maxi(int(section("economy").get("inn_cost", 100)), 0)
+
+
 ## 酒保打听价（契约 trade-spec §5）
 static func rumor_cost() -> int:
 	return int(section("economy").get("rumor_cost", 20))

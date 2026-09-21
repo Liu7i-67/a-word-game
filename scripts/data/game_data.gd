@@ -15,6 +15,10 @@ static var city_map_name: String = "城内地图"
 ## 大世界港口（契约 docs/trade-spec.md §2，data/world.json）：[{id,name,region,scene,specialties,demand_pool}]
 ## 属增量数据：world.json 缺失时保持空数组，各系统自行兜底。
 static var world_ports: Array[Dictionary] = []
+## 区域世界（契约 docs/sail-region-spec.md §1.8，world.json regions 原样加载）：
+## [{id,name,map_kind,map_name,port_scene,desc,scenes}]；属增量数据：world.json
+## 未含 regions 时保持空数组，region_of_scene 返回 {} 由调用方兜底。
+static var regions_data: Array[Dictionary] = []
 
 const _DATA_DIR := "res://data/"
 
@@ -25,10 +29,16 @@ static func load_all() -> void:
 	items = _read_json("items.json").get("items", {})
 	monsters = _read_json("monsters.json").get("monsters", {})
 	var scenes_doc := _read_json("scenes.json")
+	var world_doc := _read_json_optional("world.json")
 	world_ports = []
-	for entry in _read_json_optional("world.json").get("ports", []):
+	for entry in world_doc.get("ports", []):
 		if entry is Dictionary:
 			world_ports.append(entry)
+	# 契约 sail-region §1.8：区域表与 ports 平级，原样加载（缺失保持空数组）
+	regions_data = []
+	for entry in world_doc.get("regions", []):
+		if entry is Dictionary:
+			regions_data.append(entry)
 	ports = PackedStringArray(scenes_doc.get("ports", []))
 	if ports.is_empty() and not world_ports.is_empty():
 		# scenes.json 未再提供港口名清单时，从 world.json 推导，保持旧接口可用
@@ -94,6 +104,23 @@ static func map_scenes() -> Array:
 		if bool(scene.get("on_map", false)):
 			result.append(scene)
 	return result
+
+
+## 区域判定（契约 docs/sail-region-spec.md §1.8）：场景命中某区的 port_scene 或
+## scenes 成员即返回该区；都未命中兜底返回 venice 区（map_kind=="venice" 的项，
+## 缺该项时退回 regions_data[0]）；regions 未载（空数组）返回 {}。
+static func region_of_scene(scene_id: String) -> Dictionary:
+	ensure_loaded()
+	var fallback: Dictionary = {}
+	for region: Dictionary in regions_data:
+		if String(region.get("port_scene", "")) == scene_id \
+				or (region.get("scenes", []) as Array).has(scene_id):
+			return region
+		if fallback.is_empty() and String(region.get("map_kind", "")) == "venice":
+			fallback = region
+	if fallback.is_empty() and not regions_data.is_empty():
+		fallback = regions_data[0]
+	return fallback
 
 
 static func _read_json(file_name: String) -> Dictionary:

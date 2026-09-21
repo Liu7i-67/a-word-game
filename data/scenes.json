@@ -1,5 +1,5 @@
 {
-  "_doc": "威尼斯场景表，出口/NPC 分布按《游戏设计机制.md》§7.1；NPC 对白逐字取自 §8（占位 NPC 无文案，统一用原版占位语「暂未开放，请耐心等待。」）；场景描述文本为本复刻补写。locked=true 的出口在原版中被引用但无场景文件（未实现区域），只展示不可进入。本轮按扩展契约§1接入15个城外场景（on_map=false），原 locked 出口改为真实出口；soengdim 商人 kind 改为 shop、titzoengpou 铁匠 kind 改为 smith（§4.3/§4.4）；digung 威尼斯地宫为特殊场景，无出口，由探险官进入，内含秘密看守。本轮增补(内容契约plan-v2§2.3)：新增3野外场景(废弃堡垒/废墟/矿洞，on_map=false)双向接线(矿山↔矿洞、荒野↔废墟↔堡垒)；酒馆挂老板(tavern)+德罗西/安德鲁/露丝/西利亚/奥布帕斯(bio✅原文入lines)，实验室挂博士的助手(alchemist，暗示怪博士失踪于深处)；农场/海滩/浅海/暗礁desc补玩法指引(🔍)。",
+  "_doc": "威尼斯场景表，出口/NPC 分布按《游戏设计机制.md》§7.1；NPC 对白逐字取自 §8（占位 NPC 无文案，统一用原版占位语「暂未开放，请耐心等待。」）；场景描述文本为本复刻补写。locked=true 的出口在原版中被引用但无场景文件（未实现区域），只展示不可进入。本轮按扩展契约§1接入15个城外场景（on_map=false），原 locked 出口改为真实出口；soengdim 商人 kind 改为 shop、titzoengpou 铁匠 kind 改为 smith（§4.3/§4.4）；digung 威尼斯地宫为特殊场景，无出口，由探险官进入，内含秘密看守。本轮增补(内容契约plan-v2§2.3)：新增3野外场景(废弃堡垒/废墟/矿洞，on_map=false)双向接线(矿山↔矿洞、荒野↔废墟↔堡垒)；酒馆挂老板(tavern)+德罗西/安德鲁/露丝/西利亚/奥布帕斯(bio✅原文入lines)，实验室挂博士的助手(alchemist，暗示怪博士失踪于深处)；农场/海滩/浅海/暗礁desc补玩法指引(🔍)。主进程裁决(出海航行§1.2/§1.3)：新增18个区域野外场景(每区2个，港口↔野外1↔野外2双向接线，on_map=false，挂本区新怪各2种)；9个外港扩容为 船主(sailor)/旅店(inn)/铁匠(smith+stock按§1.1档位)/酒保/商人/区特色flavor 六NPC，teleport 占位全部退役由航海取代；威尼斯 sicoeng 增船主(航海出发港)，maatau 旧 teleporter/sail 占位已由主进程清理为 船主(sailor)+风味船老板。传送恢复（sail-region §1.10）。",
   "city_map_name": "威尼斯城内地图",
   "ports": ["威尼斯", "里斯本", "亚历山大", "突尼斯", "马赛", "雅典", "伊斯坦堡", "阿尔及尔", "拉古扎", "伊斯坦布尔"],
   "regions": ["地中海", "北海", "非洲", "东亚", "印度洋"],
@@ -293,7 +293,7 @@
       "name": "威尼斯★码头",
       "short": "★码头",
       "on_map": true,
-      "desc": "桅杆如林，咸风扑面。船老板叼着烟斗，传送师挂出了地中海的航线牌。",
+      "desc": "桅杆如林，咸风扑面。船老板叼着烟斗，船主挂出了地中海的航线牌。",
       "exits": [
         {"dir": "东", "to": "zimsinguk"},
         {"dir": "西", "to": "sicoeng"},
@@ -301,9 +301,9 @@
         {"dir": "南", "to": "gwongcoeng"}
       ],
       "npcs": [
-        {"id": "sailor", "name": "出航", "kind": "sail"},
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
-        {"id": "bossman", "name": "船老板", "kind": "flavor", "lines": ["暂未开放区域，请耐心等待"]}
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "bossman", "name": "船老板", "kind": "flavor", "lines": ["桅杆比城里的人还多，挑条好船比挑好刀还难。", "顺风的话，几天就能望见里斯本——逆风就说不准喽。"]}
       ]
     },
     {
@@ -439,6 +439,7 @@
         {"dir": "北", "to": "nganhong"}
       ],
       "npcs": [
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
         {"id": "vendor", "name": "供应商", "kind": "market"}
       ]
     },
@@ -621,11 +622,17 @@
       "short": "里斯本港",
       "on_map": false,
       "desc": "特茹河口的咸风裹着鱼干与酒香，石板码头上海鸥争抢着渔获。",
-      "exits": [],
+      "exits": [
+        {"dir": "北", "to": "risiben_jiaoqu"}
+      ],
       "npcs": [
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "innkeeper", "name": "客栈老板", "kind": "inn", "lines": ["房间里备着热水，走了一路先烫烫脚，明早还要赶潮呢。", "贝伦塔的钟声一响，{昵称}你就算睡死了也能听见。"]},
+        {"id": "smith", "name": "铁匠", "kind": "smith", "stock": ["changjian", "piyaodai", "xiaojinsiteng", "hualiwandao1", "duanchui", "liecha", "cuzhitongkui", "niupibian", "tiekuangfu", "echijian", "xuantiedao", "xiangyazhang"]},
         {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
-        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+        {"id": "merchant", "name": "商人", "kind": "trade_market"},
+        {"id": "laoshuishou", "name": "老水手", "kind": "flavor", "lines": ["你这身行头是要出海吧？去码头尽头敬杯酒，这是里斯本的老规矩。", "海角上的鸦群邪性，它们叫得越凶，浪就越高。", "听老朽一句：船上少带抱怨，多带朗姆。"]}
       ]
     },
     {
@@ -634,11 +641,17 @@
       "short": "马赛港",
       "on_map": false,
       "desc": "旧港帆影层叠，采石场的凿声与调香坊的花香一道飘上崖顶。",
-      "exits": [],
+      "exits": [
+        {"dir": "东", "to": "masa_shidi"}
+      ],
       "npcs": [
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "innkeeper", "name": "旅店老板娘", "kind": "inn", "lines": ["崖下的海风夜里凉，被褥我给你多加了一层。", "睡饱了再去石滩，那帮蟹横得很，没精神可不行，{昵称}。"]},
+        {"id": "smith", "name": "铁匠", "kind": "smith", "stock": ["changjian", "piyaodai", "xiaojinsiteng", "hualiwandao1", "duanchui", "liecha", "cuzhitongkui", "niupibian", "tiekuangfu", "echijian", "xuantiedao", "xiangyazhang", "dahuandao"]},
         {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
-        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+        {"id": "merchant", "name": "商人", "kind": "trade_market"},
+        {"id": "caishijiang", "name": "采石匠", "kind": "flavor", "lines": ["看过崖上的矿道吗？那都是我们一凿子一凿子抠出来的。", "石滩上那只蟹将军，钳子比我的凿子还硬，你可当心。", "手感好的石头会唱歌，{昵称}，你摸摸这块试试。"]}
       ]
     },
     {
@@ -647,11 +660,17 @@
       "short": "突尼斯港",
       "on_map": false,
       "desc": "白墙集市里香料堆成小山，驼铃声从沙漠尽头一直响到码头。",
-      "exits": [],
+      "exits": [
+        {"dir": "南", "to": "tunisi_luzhou"}
+      ],
       "npcs": [
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "innkeeper", "name": "驼队客栈老板", "kind": "inn", "lines": ["骆驼棚旁边那间房最凉快，窗子正对绿洲的水车。", "沙海归来的人都睡得像块砖，{昵称}，你也会这样的。"]},
+        {"id": "smith", "name": "铁匠", "kind": "smith", "stock": ["changjian", "piyaodai", "xiaojinsiteng", "hualiwandao1", "duanchui", "liecha", "cuzhitongkui", "niupibian", "tiekuangfu", "echijian", "xuantiedao", "xiangyazhang", "dahuandao", "xuantiezhongjian"]},
         {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
-        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+        {"id": "merchant", "name": "商人", "kind": "trade_market"},
+        {"id": "xunyingren", "name": "驯鹰人", "kind": "flavor", "lines": ["我的鹰认得绿洲的每一滴水，它说沙海深处有东西在翻身。", "{昵称}，进沙海前把水囊灌满，黄沙可不认人。", "想让鹰落在你肩上？先学会站着一动不动。"]}
       ]
     },
     {
@@ -660,11 +679,17 @@
       "short": "亚历山大港",
       "on_map": false,
       "desc": "灯塔余晖下莎草纸捆成垛，学者与商贩在同一片海风里讨价还价。",
-      "exits": [],
+      "exits": [
+        {"dir": "西", "to": "yalishanda_shaqiu"}
+      ],
       "npcs": [
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "innkeeper", "name": "灯塔旅店老板", "kind": "inn", "lines": ["灯塔的光每分钟扫过窗棂一趟，习惯了好睡得很。", "从古墓回来的人都说梦沉，{昵称}，我给你点盏安神的油灯。"]},
+        {"id": "smith", "name": "铁匠", "kind": "smith", "stock": ["changjian", "piyaodai", "xiaojinsiteng", "hualiwandao1", "duanchui", "liecha", "cuzhitongkui", "niupibian", "tiekuangfu", "echijian", "xuantiedao", "xiangyazhang", "dahuandao", "xuantiezhongjian", "xuantiejia", "anlinjuren"]},
         {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
-        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+        {"id": "merchant", "name": "商人", "kind": "trade_market"},
+        {"id": "bowu_xuezhe", "name": "博物学者", "kind": "flavor", "lines": ["你来得正好！帮我看看这片鳞片——是鳗还是蛟？", "大图书馆烧掉的那批抄本，听说残页散落在古墓里。", "沙丘每年往城下挪三步，{昵称}，再过百年这座城就得搬家。"]}
       ]
     },
     {
@@ -673,11 +698,17 @@
       "short": "雅典港",
       "on_map": false,
       "desc": "断柱之间晾着刚出窑的陶器，哲人后裔守着摊位慢悠悠地吆喝。",
-      "exits": [],
+      "exits": [
+        {"dir": "北", "to": "yadian_shanlin"}
+      ],
       "npcs": [
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "innkeeper", "name": "旅店老板娘", "kind": "inn", "lines": ["床是橄榄木打的，睡过的人都说连梦都变清醒了。", "山林里猴群天亮就闹，{昵称}，早点歇早点起。"]},
+        {"id": "smith", "name": "铁匠", "kind": "smith", "stock": ["changjian", "piyaodai", "xiaojinsiteng", "hualiwandao1", "duanchui", "liecha", "cuzhitongkui", "niupibian", "tiekuangfu", "echijian", "xuantiedao", "xiangyazhang", "dahuandao", "xuantiezhongjian", "xuantiejia", "anlinjuren", "lingzhuzhiren"]},
         {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
-        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+        {"id": "merchant", "name": "商人", "kind": "trade_market"},
+        {"id": "zhexuejia", "name": "哲学家", "kind": "flavor", "lines": ["{昵称}，你说石猴抢你干粮时，它是不义，还是天性？", "神殿的柱子倒了几百年，可『认识你自己』还立着。", "别急着爬上卫城，先想想你为什么想爬。"]}
       ]
     },
     {
@@ -686,11 +717,17 @@
       "short": "伊斯坦堡港",
       "on_map": false,
       "desc": "海峡之上船来船往，驼队卸下的丝绸在拱廊下泛着水一样的光。",
-      "exits": [],
+      "exits": [
+        {"dir": "西", "to": "yisitanbao_chengjiao"}
+      ],
       "npcs": [
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "innkeeper", "name": "驿站老板", "kind": "inn", "lines": ["上房三面厚墙一面朝海，冬暖夏凉，驼队客都抢着住。", "城郊铁骑夜里巡两趟，{昵称}，放心睡你的。"]},
+        {"id": "smith", "name": "铁匠", "kind": "smith", "stock": ["changjian", "piyaodai", "xiaojinsiteng", "hualiwandao1", "duanchui", "liecha", "cuzhitongkui", "niupibian", "tiekuangfu", "echijian", "xuantiedao", "xiangyazhang", "dahuandao", "xuantiezhongjian", "xuantiejia", "anlinjuren", "lingzhuzhiren", "longya_ren", "longlin_jia"]},
         {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
-        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+        {"id": "merchant", "name": "商人", "kind": "trade_market"},
+        {"id": "xiangliao_shangren", "name": "香料商人", "kind": "flavor", "lines": ["纯正的胡椒，从印度洋一路过来的，闻闻，不买不收钱。", "要塞那位雷士老爷是我的老主顾——打雷的也怕嘴里没味。", "{昵称}，替我把这包藏红花捎进旧皇宫？报酬管你一顿烤鱼。"]}
       ]
     },
     {
@@ -699,11 +736,17 @@
       "short": "伊斯坦布尔港",
       "on_map": false,
       "desc": "金角湾桅樯如林，成捆的皮货与成串的鱼干隔着海峡都能望见。",
-      "exits": [],
+      "exits": [
+        {"dir": "东", "to": "yisitanbuer_jiaoqu"}
+      ],
       "npcs": [
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "innkeeper", "name": "宫殿旅店老板娘", "kind": "inn", "lines": ["这店从前专伺候进宫的使节，床帏是真丝的。", "梦里要是听见有人念咒，别应声，翻个身接着睡，{昵称}。"]},
+        {"id": "smith", "name": "铁匠", "kind": "smith", "stock": ["changjian", "piyaodai", "xiaojinsiteng", "hualiwandao1", "duanchui", "liecha", "cuzhitongkui", "niupibian", "tiekuangfu", "echijian", "xuantiedao", "xiangyazhang", "dahuandao", "xuantiezhongjian", "xuantiejia", "anlinjuren", "lingzhuzhiren", "longya_ren", "longlin_jia", "fenghuang_zhang", "shengdian_zhongkai"]},
         {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
-        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+        {"id": "merchant", "name": "商人", "kind": "trade_market"},
+        {"id": "gongting_shushi", "name": "宫廷术士", "kind": "flavor", "lines": ["嘘——旧皇宫的幻术师没死，他只是把自己藏进了一面镜子里。", "{昵称}，你身上带着海的味道，最近刚打过一场海战吧？", "术法如同盐，撒对了地方是滋味，撒多了是苦。"]}
       ]
     },
     {
@@ -712,11 +755,17 @@
       "short": "阿尔及尔港",
       "on_map": false,
       "desc": "白色阶地城俯瞰港湾，毛皮贩子与盐商在椰枣树影下掐着价。",
-      "exits": [],
+      "exits": [
+        {"dir": "北", "to": "aerjier_haiwan"}
+      ],
       "npcs": [
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "innkeeper", "name": "旅店老板娘", "kind": "inn", "lines": ["房间在二层朝海那侧，夜里能听见浪，听不见别的。", "旧垒那边不太平，{昵称}，睡足了再上去。"]},
+        {"id": "smith", "name": "铁匠", "kind": "smith", "stock": ["changjian", "piyaodai", "xiaojinsiteng", "hualiwandao1", "duanchui", "liecha", "cuzhitongkui", "niupibian", "tiekuangfu", "echijian", "xuantiedao", "xiangyazhang", "dahuandao", "xuantiezhongjian", "xuantiejia"]},
         {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
-        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+        {"id": "merchant", "name": "商人", "kind": "trade_market"},
+        {"id": "tuixiu_haidao", "name": "退役海盗", "kind": "flavor", "lines": ["哈哈，认出这枚耳环了吗？那是当年「红帆」号的信物。", "金盆洗手？老子的手洗了十年，夜里还是听得见锚链响。", "{昵称}，走旧垒时替我看一眼西炮台，我的老伙计们还守在那儿。"]}
       ]
     },
     {
@@ -725,11 +774,296 @@
       "short": "拉古扎港",
       "on_map": false,
       "desc": "红顶小城依山傍海，盐田里晒出的白盐正是全城商路的底气。",
-      "exits": [],
+      "exits": [
+        {"dir": "南", "to": "laguzha_haian"}
+      ],
       "npcs": [
-        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "sailor", "name": "船主", "kind": "sailor"},
+        {"id": "teleporter", "name": "传送师", "kind": "teleport"},
+        {"id": "innkeeper", "name": "旅店老板娘", "kind": "inn", "lines": ["{昵称}，楼上房间刚换过盐渍的海草垫子，睡下去比船板稳当多了。", "半夜听见钟楼敲九下别怕，那是守夜人换岗，不是闹鬼。"]},
+        {"id": "smith", "name": "铁匠", "kind": "smith", "stock": ["changjian", "piyaodai", "xiaojinsiteng", "hualiwandao1", "duanchui", "liecha", "cuzhitongkui", "niupibian", "tiekuangfu", "echijian", "xuantiedao"]},
         {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
-        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+        {"id": "merchant", "name": "商人", "kind": "trade_market"},
+        {"id": "yinyue_shiren", "name": "吟游诗人", "kind": "flavor", "lines": ["{昵称}，听过《盐与帆》吗？拉古扎人靠一把盐撑起了半条商路。", "要我为你唱一曲吗？三枚铜贝，包你听完想起故乡。", "城头那位总兵官年轻时也在我歌里待过——不过别说是我讲的。"]}
+      ]
+    },
+    {
+      "id": "laguzha_haian",
+      "name": "拉古扎海岸",
+      "short": "海岸",
+      "on_map": false,
+      "desc": "卵石滩上晾着渔网与盐袋，浪头拍碎礁石溅起白沫。掠袭者的快船常在暮色里贴着岸线出没。",
+      "exits": [
+        {"dir": "北", "to": "laguzha"},
+        {"dir": "西", "to": "laguzha_shanqiu"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "laguzha_haidao", "count": 5},
+        {"id": "laguzha_yejueshu", "count": 5}
+      ]
+    },
+    {
+      "id": "laguzha_shanqiu",
+      "name": "拉古扎山丘",
+      "short": "山丘",
+      "on_map": false,
+      "desc": "山道在葡萄园与石墙间蜿蜒，旧瞭望塔的影子斜斜压过草坡。野猪群把梯田拱得坑坑洼洼。",
+      "exits": [
+        {"dir": "东", "to": "laguzha_haian"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "laguzha_yejueshu", "count": 5},
+        {"id": "laguzha_haidao", "count": 5}
+      ]
+    },
+    {
+      "id": "risiben_jiaoqu",
+      "name": "里斯本近郊",
+      "short": "近郊",
+      "on_map": false,
+      "desc": "红瓦农舍沿坡而建，晾衣绳与渔网在海风里一起摆荡。山贼据守的旧磨坊立在坡顶，磨盘早就不转了。",
+      "exits": [
+        {"dir": "南", "to": "risiben"},
+        {"dir": "西", "to": "risiben_haijiao"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "risiben_shanzei", "count": 5},
+        {"id": "risiben_haiyaokui", "count": 5}
+      ]
+    },
+    {
+      "id": "risiben_haijiao",
+      "name": "里斯本海角",
+      "short": "海角",
+      "on_map": false,
+      "desc": "悬崖直插进大西洋，灯塔的白光扫过黑色的礁脉。鸦群在风里尖叫，盘旋着不肯散去。",
+      "exits": [
+        {"dir": "东", "to": "risiben_jiaoqu"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "risiben_haiyaokui", "count": 5},
+        {"id": "risiben_shanzei", "count": 5}
+      ]
+    },
+    {
+      "id": "masa_shidi",
+      "name": "马赛石滩",
+      "short": "石滩",
+      "on_map": false,
+      "desc": "白色石灰岩滩被浪磨得溜光，渔船就泊在天然防波堤的缺口里。大蟹横行处，游人都绕着走。",
+      "exits": [
+        {"dir": "西", "to": "masa"},
+        {"dir": "南", "to": "masa_yakuang"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "masa_shijiang", "count": 5},
+        {"id": "masa_yaolang", "count": 5}
+      ]
+    },
+    {
+      "id": "masa_yakuang",
+      "name": "马赛崖矿",
+      "short": "崖矿",
+      "on_map": false,
+      "desc": "崖壁上凿出的矿道一层叠一层，像蜂巢嵌在赭红色的岩体里。矿灯照见处，岩屑簌簌往下掉。",
+      "exits": [
+        {"dir": "北", "to": "masa_shidi"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "masa_yaolang", "count": 5},
+        {"id": "masa_shijiang", "count": 5}
+      ]
+    },
+    {
+      "id": "tunisi_luzhou",
+      "name": "突尼斯绿洲",
+      "short": "绿洲",
+      "on_map": false,
+      "desc": "棕榈丛围出一汪碧水，水车吱呀转个不停。土鹰在高处盘旋，盯着饮水的羊群。",
+      "exits": [
+        {"dir": "北", "to": "tunisi"},
+        {"dir": "南", "to": "tunisi_shamo"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "tunisi_tuying", "count": 5},
+        {"id": "tunisi_shajuan", "count": 5}
+      ]
+    },
+    {
+      "id": "tunisi_shamo",
+      "name": "突尼斯沙海",
+      "short": "沙海",
+      "on_map": false,
+      "desc": "沙浪一层推着一层，一直铺到天边，正午的日头能把人晒脱一层皮。沙蜷遁走的痕迹像一条细细的墨线。",
+      "exits": [
+        {"dir": "北", "to": "tunisi_luzhou"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "tunisi_shajuan", "count": 5},
+        {"id": "tunisi_tuying", "count": 5}
+      ]
+    },
+    {
+      "id": "aerjier_haiwan",
+      "name": "阿尔及尔海湾",
+      "short": "海湾",
+      "on_map": false,
+      "desc": "月牙形的海湾揽着白城，浪不大，暗流却急。老渔民说湾底的漩涡里住着不肯安分的东西。",
+      "exits": [
+        {"dir": "南", "to": "aerjier"},
+        {"dir": "西", "to": "aerjier_yaolei"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "aerjier_haigui", "count": 5},
+        {"id": "aerjier_leiwei", "count": 5}
+      ]
+    },
+    {
+      "id": "aerjier_yaolei",
+      "name": "阿尔及尔旧垒",
+      "short": "旧垒",
+      "on_map": false,
+      "desc": "旧城墙的残垒爬满藤蔓，炮口还对着海平线。风穿过垛口时，呜呜声像极了当年的号角。",
+      "exits": [
+        {"dir": "东", "to": "aerjier_haiwan"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "aerjier_leiwei", "count": 5},
+        {"id": "aerjier_haigui", "count": 5}
+      ]
+    },
+    {
+      "id": "yalishanda_shaqiu",
+      "name": "亚历山大沙丘",
+      "short": "沙丘",
+      "on_map": false,
+      "desc": "沙丘从西面一步步逼近城垣，半截古柱从沙里探出头。蝎子顺着柱缝晒太阳，尾巴翘得笔直。",
+      "exits": [
+        {"dir": "东", "to": "yalishanda"},
+        {"dir": "西", "to": "yalishanda_gumu"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "yalishanda_shawei", "count": 5},
+        {"id": "yalishanda_munaiyi", "count": 5}
+      ]
+    },
+    {
+      "id": "yalishanda_gumu",
+      "name": "亚历山大古墓",
+      "short": "古墓",
+      "on_map": false,
+      "desc": "地下墓穴的阶梯旋进黑暗，壁龛里的陶瓮还封着两千年前的空气。绷带散落一地，有些绷带自己会动。",
+      "exits": [
+        {"dir": "东", "to": "yalishanda_shaqiu"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "yalishanda_munaiyi", "count": 5},
+        {"id": "yalishanda_shawei", "count": 5}
+      ]
+    },
+    {
+      "id": "yadian_shanlin",
+      "name": "雅典山林",
+      "short": "山林",
+      "on_map": false,
+      "desc": "橄榄树与松林遮出满地凉荫，石猴在枝头抢行人的干粮。山泉边的大理石残碑上还刻着半行荷马。",
+      "exits": [
+        {"dir": "南", "to": "yadian"},
+        {"dir": "北", "to": "yadian_shendian"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "yadian_shanhou", "count": 5},
+        {"id": "yadian_shedian", "count": 5}
+      ]
+    },
+    {
+      "id": "yadian_shendian",
+      "name": "雅典神殿遗迹",
+      "short": "神殿",
+      "on_map": false,
+      "desc": "倒塌的廊柱间野草齐膝，断臂的神像仍保持着俯视人间的姿态。蛇影在祭坛的裂缝里游走。",
+      "exits": [
+        {"dir": "南", "to": "yadian_shanlin"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "yadian_shedian", "count": 5},
+        {"id": "yadian_shanhou", "count": 5}
+      ]
+    },
+    {
+      "id": "yisitanbao_chengjiao",
+      "name": "伊斯坦堡城郊",
+      "short": "城郊",
+      "on_map": false,
+      "desc": "城墙外的驿站挤满驼队，铜壶与毯子在旧货摊上堆成小山。铁骑巡队的马蹄声从官道尽头滚过来。",
+      "exits": [
+        {"dir": "东", "to": "yisitanbao"},
+        {"dir": "北", "to": "yisitanbao_yaolei"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "yisitanbao_tieqi", "count": 5},
+        {"id": "yisitanbao_leishi", "count": 5}
+      ]
+    },
+    {
+      "id": "yisitanbao_yaolei",
+      "name": "伊斯坦堡要塞",
+      "short": "要塞",
+      "on_map": false,
+      "desc": "要塞的雉堞如锯齿咬住海峡的风，锈住的雷石炮立在垛口却依旧慑人。守军的旗语在雾里一明一灭。",
+      "exits": [
+        {"dir": "南", "to": "yisitanbao_chengjiao"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "yisitanbao_leishi", "count": 5},
+        {"id": "yisitanbao_tieqi", "count": 5}
+      ]
+    },
+    {
+      "id": "yisitanbuer_jiaoqu",
+      "name": "伊斯坦布尔近郊",
+      "short": "近郊",
+      "on_map": false,
+      "desc": "木屋沿山坡层层叠上去，炊烟与海雾缠在一处。近卫换防的马队刚过，石板路上还冒着蹄铁的火星。",
+      "exits": [
+        {"dir": "西", "to": "yisitanbuer"},
+        {"dir": "南", "to": "yisitanbuer_huanggong"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "yisitanbuer_jinwei", "count": 5},
+        {"id": "yisitanbuer_huan", "count": 5}
+      ]
+    },
+    {
+      "id": "yisitanbuer_huanggong",
+      "name": "伊斯坦布尔旧皇宫",
+      "short": "旧皇宫",
+      "on_map": false,
+      "desc": "鎏金的宫门歪在绞链上，孔雀石柱间铺着褪色的波斯毯。据说旧主的术士们从未真正离开这里。",
+      "exits": [
+        {"dir": "北", "to": "yisitanbuer_jiaoqu"}
+      ],
+      "npcs": [],
+      "monsters": [
+        {"id": "yisitanbuer_huan", "count": 5},
+        {"id": "yisitanbuer_jinwei", "count": 5}
       ]
     }
   ]

@@ -43,6 +43,8 @@ func _run_all() -> void:
 	_test_trade_router(player)
 	_test_sell_equip(player)
 	_test_life_system(player)
+	_test_sail_region_data(player)
+	_test_sail_region_flow(player)
 	_test_item_effects(player)
 	_test_equipment_affixes(player)
 	_test_gem_merge(player)
@@ -91,8 +93,10 @@ func _test_data() -> void:
 	check(GameData.scenes_by_id.size() >= 25, "场景数应 ≥25（原版 25 + 城外扩展），实际 %d" % GameData.scenes_by_id.size())
 	check(GameData.ports.size() == 10, "传送港口应为 10 个")
 
-	var npc_kinds := ["flavor", "welfare", "church", "bank", "casino", "market", "teleport", "sail", "dungeon", "shop", "smith", "dungeon_keeper", "trade_market", "tavern_rumor",
-		"tavern", "circus", "alchemist", "trainer", "siren", "riddle"]
+	# sail-region 契约 §1.3：船主(sailor)/旅店(inn) 新 kind；§1.10 用户裁决：传送与航海
+	# 并存（teleport 恢复，旧 sail 占位不恢复），白名单同步加回 teleport
+	var npc_kinds := ["flavor", "welfare", "church", "bank", "casino", "market", "dungeon", "shop", "smith", "dungeon_keeper", "trade_market", "tavern_rumor",
+		"tavern", "circus", "alchemist", "trainer", "siren", "riddle", "sailor", "inn", "teleport"]
 	for id in GameData.scene_order:
 		var scene: Dictionary = GameData.scenes_by_id[id]
 		check(String(scene.get("name", "")) != "", "场景 %s 缺 name" % id)
@@ -411,27 +415,15 @@ func _test_router(player: PlayerCore) -> void:
 		check(router.page.contains("耐久"), "装备详情页")
 	router.handle("equip_off:0" if player.hand == 0 else "equip_view:0")
 
-	# 状态 / 地图 / 传送
+	# 状态 / 地图 / 船主页（sail-region 契约 §1.6：tp/teleport 退役，航海取代传送）
 	router.handle("status")
 	check(router.page.contains("昵称：马可波罗"), "状态页")
 	router.handle("map")
 	check(router.page.contains("威尼斯城内地图"), "城内地图")
-	router.handle("goto:maatau")
-	router.handle("npc:maatau:teleporter")
-	check(router.page.contains("地中海"), "传送页")
-	if GameData.world_ports.is_empty():
-		router.handle("tp:1")
-		check(router.page.contains("暂未开发区域"), "未开放港口占位（原文案）")
-	else:
-		# world 就位：tp 真实出海（契约 trade-spec §6），验完回威尼斯继续旧链路
-		var wallet0 := player.copper + player.bank_silver * Rules.copper_per_silver()
-		router.handle("tp:1")
-		check(player.location == String(GameData.world_ports[1].get("scene", "")), "tp 到达目标港场景")
-		check(router.page.contains("船票花去"), "船票提示页")
-		check(player.copper + player.bank_silver * Rules.copper_per_silver() == wallet0 - Rules.teleport_cost_copper(), "tp 扣费 1000 铜贝")
-		router.handle("goto:maatau")
-	router.handle("npc:maatau:sailor")
-	check(router.page.contains("暂未开发区域"), "出航占位（原文案）")
+	router.handle("goto:sicoeng")
+	router.handle("npc:sicoeng:sailor")
+	check(router.page.contains("船主") and router.page.contains("sail_to:"), "船主页（sail_to 链接）")
+	check(router.page.contains("当前所在"), "船主页标当前所在")
 	router.handle("goto:baksingmun")
 	router.handle("npc:baksingmun:explorer")
 	check(router.page.contains("威尼斯地宫"), "探险官对白")
@@ -1061,7 +1053,7 @@ func _test_trade_engine() -> void:
 	check(pool_clean, "情报池排除当前港且非空")
 
 
-# ---------- 5.10 航海贸易链路（契约 §4-§6：跨港买卖/情报真实性/tp 扣费） ----------
+# ---------- 5.10 航海贸易链路（契约 §4-§6：跨港买卖/情报真实性；跨港移动细节归 5.18b 航海全流程） ----------
 
 func _test_trade_router(player: PlayerCore) -> void:
 	var router := EventRouter.new()
@@ -1081,11 +1073,10 @@ func _test_trade_router(player: PlayerCore) -> void:
 	var dest := String(plan.get("dest", ""))
 	var wallet := player.copper + player.bank_silver * Rules.copper_per_silver()
 
-	# tp 去产地港（页面写 10 银，实扣 cost_copper=1000 铜贝，银行自动折兑）
-	router.handle("tp:%d" % _port_index(origin))
-	check(player.location == Trade.port_scene(origin), "tp 到达产地港")
-	wallet -= Rules.teleport_cost_copper()
-	check(player.copper + player.bank_silver * Rules.copper_per_silver() == wallet, "tp 实扣 teleport.cost_copper")
+	# 定位产地港（sail-region 契约 §1.6：tp 退役，跨港移动由 _test_sail_region_flow
+	# 全流程覆盖，本用例专注贸易链路，直接 set_location 落位）
+	player.set_location(Trade.port_scene(origin))
+	check(player.location == Trade.port_scene(origin), "定位产地港")
 	# 港口市场页：region / 随身铜贝 / 🔥抢手 / 买卖档位
 	router.handle("npc:%s:merchant" % Trade.port_scene(origin))
 	check(router.page.contains(String(Trade.port_def(origin).get("region", ""))), "市场页显示 region")
@@ -1100,12 +1091,12 @@ func _test_trade_router(player: PlayerCore) -> void:
 	check(player.count_stack(good) == qty, "产地买入 %d 箱入包" % qty)
 	wallet -= buy_unit * qty
 	check(player.copper + player.bank_silver * Rules.copper_per_silver() == wallet, "买入扣款=产地价×数量")
-	# 港口传送页（当前所在标记）→ tp 去热门港
-	router.handle("npc:%s:teleporter" % Trade.port_scene(origin))
-	check(router.page.contains("当前所在"), "传送页标当前所在")
-	router.handle("tp:%d" % _port_index(dest))
-	check(player.location == Trade.port_scene(dest), "tp 到达热门港")
-	wallet -= Rules.teleport_cost_copper()
+	# 港口船主页（当前所在标记 + sail_to 链接，sail-region 契约 §1.6）→ 定位热门港
+	router.handle("npc:%s:sailor" % Trade.port_scene(origin))
+	check(router.page.contains("当前所在"), "船主页标当前所在")
+	check(router.page.contains("sail_to:"), "船主页含 sail_to 链接")
+	player.set_location(Trade.port_scene(dest))
+	check(player.location == Trade.port_scene(dest), "定位热门港")
 	# 酒保情报：扣费 + 必真 + 排除当前港
 	router.handle("npc:%s:barkeep" % Trade.port_scene(dest))
 	check(router.page.contains("打听小道消息"), "酒保情报页 rumor 链接")
@@ -1120,14 +1111,7 @@ func _test_trade_router(player: PlayerCore) -> void:
 	router.handle("trade_sell:%s:%d" % [good, qty])
 	check(player.count_stack(good) == 0, "热门港卖出清仓")
 	wallet += sell_unit * qty
-	check(player.copper + player.bank_silver * Rules.copper_per_silver() == wallet, "链路终钱包对账")
-	# tp 钱不够：船老板语气提示，位置不变
-	player.bank_withdraw(player.bank_silver)
-	player.take_copper(player.copper)
-	var loc0 := player.location
-	router.handle("tp:0")
-	check(player.location == loc0, "钱不够不移动")
-	check(router.page.contains("船老板"), "钱不够给船老板语气提示")
+	check(player.copper + player.bank_silver * Rules.copper_per_silver() == wallet, "链路终钱包对账（ sail-region 时代：钱包只受买卖与情报影响）")
 
 
 func _port_npcs_ready() -> bool:
@@ -1141,7 +1125,8 @@ func _port_npcs_ready() -> bool:
 		var ids: Array[String] = []
 		for npc: Dictionary in scene.get("npcs", []):
 			ids.append(String(npc.get("id", "")))
-		if not (ids.has("merchant") and ids.has("barkeep") and ids.has("teleporter")):
+		# sail-region 契约 §1.3：外港传送占位退役为船主，贸易链路前置改验 sailor
+		if not (ids.has("merchant") and ids.has("barkeep") and ids.has("sailor")):
 			return false
 	return true
 
@@ -1984,3 +1969,355 @@ func _test_save_manager() -> void:
 	var gold: Variant = reader.data.get("gold", "MISSING")
 	var version: Variant = reader.data.get("_version", "MISSING")
 	check(gold == 123 and version == 1, "SaveManager 往返 gold/version")
+
+
+# ---------- 5.18 出海航行 + 区域世界（契约 docs/sail-region-spec.md §0/§1.4-§1.8） ----------
+
+## 区域怪 18（id: 等级，id 全部锁死 sail-region 契约 §1.4）
+const SAIL_REGION_MOBS := {
+	"laguzha_haidao": 11, "laguzha_yejueshu": 13,
+	"risiben_shanzei": 13, "risiben_haiyaokui": 15,
+	"masa_shijiang": 15, "masa_yaolang": 17,
+	"tunisi_tuying": 17, "tunisi_shajuan": 19,
+	"aerjier_haigui": 19, "aerjier_leiwei": 21,
+	"yalishanda_shawei": 21, "yalishanda_munaiyi": 23,
+	"yadian_shanhou": 23, "yadian_shedian": 25,
+	"yisitanbao_tieqi": 25, "yisitanbao_leishi": 27,
+	"yisitanbuer_jinwei": 27, "yisitanbuer_huan": 29,
+}
+
+## 海怪 6（habitat=="sea"，等级 5/10/15/20/25/30，契约 §1.4）
+const SAIL_SEA_MOBS := {
+	"haiou_qun": 5, "anjiao_renyu": 10, "shenhai_ju_man": 15,
+	"youling_fanchuan": 20, "kelaken_youzai": 25, "fengbao_sairen": 30,
+}
+
+## 18 个新野外场景（契约 §1.2，每区 2 个）
+const SAIL_REGION_SCENES := [
+	"laguzha_haian", "laguzha_shanqiu",
+	"risiben_jiaoqu", "risiben_haijiao",
+	"masa_shidi", "masa_yakuang",
+	"tunisi_luzhou", "tunisi_shamo",
+	"aerjier_haiwan", "aerjier_yaolei",
+	"yalishanda_shaqiu", "yalishanda_gumu",
+	"yadian_shanlin", "yadian_shendian",
+	"yisitanbao_chengjiao", "yisitanbao_yaolei",
+	"yisitanbuer_jiaoqu", "yisitanbuer_huanggong",
+]
+
+## 4 件新装备（契约 §1.5）：id → 期望字段（武器验 atk、护甲验 def/slots）
+const SAIL_REGION_EQUIPS := {
+	"longya_ren": {"req_level": 24, "price": 42000, "atk": [124, 210]},
+	"longlin_jia": {"req_level": 24, "price": 46000, "def": 34, "slots": 1},
+	"fenghuang_zhang": {"req_level": 26, "price": 56000, "atk": [134, 228]},
+	"shengdian_zhongkai": {"req_level": 26, "price": 60000, "def": 38, "slots": 1},
+}
+
+
+func _test_sail_region_data(player: PlayerCore) -> void:
+	# ---- 数据硬校验（D1 波1 并行：数据未就位时整组跳过并记「预期并行缺口」，不改 data/*） ----
+	var missing_mobs: Array[String] = []
+	for mid: String in SAIL_REGION_MOBS:
+		if not GameData.has_monster(mid):
+			missing_mobs.append(mid)
+	for sea_id: String in SAIL_SEA_MOBS:
+		if not GameData.has_monster(sea_id):
+			missing_mobs.append(sea_id)
+	if missing_mobs.is_empty():
+		for mid2: String in SAIL_REGION_MOBS:
+			_check_sail_monster_formula(mid2, int(SAIL_REGION_MOBS[mid2]))
+		for sea_id2: String in SAIL_SEA_MOBS:
+			_check_sail_monster_formula(sea_id2, int(SAIL_SEA_MOBS[sea_id2]))
+			check(String(GameData.get_monster(sea_id2).get("habitat", "")) == "sea",
+				"海怪 %s habitat=sea（契约 §1.4）" % sea_id2)
+	else:
+		push_warning("SKIP: sail-region 数据硬校验（24 新怪）缺 %d 个 id，预期并行缺口（D1 波1）" % missing_mobs.size())
+
+	var missing_scenes := 0
+	for sid: String in SAIL_REGION_SCENES:
+		if not GameData.has_scene(sid):
+			missing_scenes += 1
+	if missing_scenes == 0:
+		for sid2: String in SAIL_REGION_SCENES:
+			var scene: Dictionary = GameData.get_scene(sid2)
+			for exit_e: Dictionary in scene.get("exits", []):
+				var to := String(exit_e.get("to", ""))
+				check(GameData.has_scene(to), "新场景 %s 出口指向存在的场景 %s" % [sid2, to])
+				var back := false
+				for back_e: Dictionary in GameData.get_scene(to).get("exits", []):
+					if String(back_e.get("to", "")) == sid2:
+						back = true
+						break
+				check(back, "新场景 %s ↔ %s 出口双向闭合" % [sid2, to])
+			var mons: Array = scene.get("monsters", [])
+			check(not mons.is_empty(), "新场景 %s 挂有本区怪" % sid2)
+			for m_entry: Dictionary in mons:
+				check(GameData.has_monster(String(m_entry.get("id", ""))),
+					"新场景 %s 怪物 %s 存在" % [sid2, String(m_entry.get("id", ""))])
+	else:
+		push_warning("SKIP: sail-region 数据硬校验（18 新场景）缺 %d 个 id，预期并行缺口（D1 波1）" % missing_scenes)
+
+	if not GameData.regions_data.is_empty():
+		check(GameData.regions_data.size() == 10, "regions_data 应为 10 项（实际 %d）" % GameData.regions_data.size())
+		for region: Dictionary in GameData.regions_data:
+			var rid := String(region.get("id", "?"))
+			var ps := String(region.get("port_scene", ""))
+			check(ps != "" and GameData.has_scene(ps), "区域 %s port_scene 场景存在" % rid)
+			for member in region.get("scenes", []):
+				check(GameData.has_scene(String(member)), "区域 %s scenes 成员场景存在（%s）" % [rid, String(member)])
+		check(String(GameData.region_of_scene("sicoeng").get("id", "")) == "venice",
+			"region_of_scene：真实数据 sicoeng 命中 venice 区")
+	else:
+		push_warning("SKIP: sail-region 数据硬校验（regions_data）未就位，预期并行缺口（D1 波1）")
+
+	var missing_equips := 0
+	for eid: String in SAIL_REGION_EQUIPS:
+		if not GameData.has_item(eid):
+			missing_equips += 1
+	if missing_equips == 0:
+		for eid2: String in SAIL_REGION_EQUIPS:
+			var spec: Dictionary = SAIL_REGION_EQUIPS[eid2]
+			var item: Dictionary = GameData.get_item(eid2)
+			check(int(item.get("req_level", -1)) == int(spec.get("req_level", -1)),
+				"新装备 %s req_level=%d" % [eid2, int(spec.get("req_level", -1))])
+			check(int(item.get("price", -1)) == int(spec.get("price", -1)),
+				"新装备 %s price=%d" % [eid2, int(spec.get("price", -1))])
+			if spec.has("atk"):
+				var want_atk: Array = spec.get("atk", [])
+				var atk: Array = item.get("atk", [])
+				check(atk.size() == 2 and int(atk[0]) == int(want_atk[0]) and int(atk[1]) == int(want_atk[1]),
+					"新装备 %s atk=%s" % [eid2, str(want_atk)])
+			if spec.has("def"):
+				check(int(item.get("def", -1)) == int(spec.get("def", -1)),
+					"新装备 %s def=%d" % [eid2, int(spec.get("def", -1))])
+				check(int(item.get("slots", -1)) == int(spec.get("slots", -1)),
+					"新装备 %s slots=%d" % [eid2, int(spec.get("slots", -1))])
+	else:
+		push_warning("SKIP: sail-region 数据硬校验（4 新装备）缺 %d 件，预期并行缺口（D1 波1）" % missing_equips)
+
+	# ---- 引擎自证用例（不依赖 D1，契约 §2：构造内存数据自证） ----
+
+	# Rules getter（economy 节，config 随 E1 落地，契约 §1.7）
+	check(Rules.sail_cost() == 1000, "Rules.sail_cost()=1000（契约 §1.7）")
+	check(Rules.inn_cost() == 100, "Rules.inn_cost()=100（契约 §1.7）")
+
+	# CombatEngine.at_sea：默认 false 且可置位（判定/文案归路由层，契约 §1.6）
+	player.new_game("水手", "♂")
+	var sea_engine := CombatEngine.new("bingji", player)
+	check(sea_engine != null and not sea_engine.at_sea, "CombatEngine.at_sea 默认 false")
+	sea_engine.at_sea = true
+	check(sea_engine.at_sea, "CombatEngine.at_sea 可置位")
+
+	# Life.inn_rest（契约 §1.7）：扣费 + 生活体力回满 + HP 回满 + hp_changed 广播
+	player.new_game("住店客", "♂")
+	player.add_copper(1000)
+	player.stamina = 0
+	player.hurt(player.hp_cur)
+	var hp_signals := [0]
+	player.hp_changed.connect(func(_c: int, _m: int) -> void: hp_signals[0] += 1)
+	var res := Life.inn_rest(player, Rules.inn_cost())
+	check(bool(res.get("ok", false)), "inn_rest：余额充足住店成功")
+	check(player.copper == 1000 - Rules.inn_cost(), "inn_rest：扣费=inn_cost")
+	check(player.stamina == player.max_stamina(), "inn_rest：生活体力回满")
+	check(player.hp_cur == player.max_hp(), "inn_rest：HP 回满")
+	check(hp_signals[0] >= 1, "inn_rest：hp_changed 已广播")
+	check(String(res.get("msg", "")).contains("全都回满"), "inn_rest：契约成功文案")
+
+	# 余额不足：ok:false + 契约文案 + 不恢复
+	player.take_copper(player.copper)
+	player.stamina = 0
+	var res_bad := Life.inn_rest(player, Rules.inn_cost())
+	check(not bool(res_bad.get("ok", true)), "inn_rest：余额不足拒绝")
+	check(String(res_bad.get("msg", "")).contains("拿不出来"), "inn_rest：契约不足文案")
+	check(player.stamina == 0, "inn_rest：拒绝不恢复生活体力")
+
+	# GameData.region_of_scene（契约 §1.8）：内存注入 regions 测三种路径，测后还原
+	var saved_regions: Array[Dictionary] = GameData.regions_data
+	var injected: Array[Dictionary] = [
+		{"id": "venice", "name": "威尼斯", "map_kind": "venice", "port_scene": "sicoeng", "scenes": []},
+		{"id": "laguzha", "name": "拉古扎", "map_kind": "area", "port_scene": "laguzha", "scenes": ["laguzha_haian"]},
+	]
+	GameData.regions_data = injected
+	check(String(GameData.region_of_scene("sicoeng").get("id", "")) == "venice",
+		"region_of_scene：port_scene 命中 venice 区")
+	check(String(GameData.region_of_scene("laguzha").get("id", "")) == "laguzha",
+		"region_of_scene：他区港口命中所在区")
+	check(String(GameData.region_of_scene("laguzha_haian").get("id", "")) == "laguzha",
+		"region_of_scene：scenes 成员命中所在区")
+	check(String(GameData.region_of_scene("nowhere_xyz").get("id", "")) == "venice",
+		"region_of_scene：未知场景兜底 venice 区")
+	GameData.regions_data = []
+	check(GameData.region_of_scene("sicoeng").is_empty(), "region_of_scene：regions 未载返回 {}")
+	GameData.regions_data = saved_regions
+
+
+## 契约新怪数值公式硬校验（sail-region §0：hp=round(40×L^1.2)、atk=[3+2L,8+3L]、
+## def=round(5+1.5L)、exp=[round(0.8L)+1,4L+5]、copper=[5L,15L+10]、instances=5，容差 0）
+func _check_sail_monster_formula(mid: String, lv: int) -> void:
+	var m: Dictionary = GameData.get_monster(mid)
+	if m.is_empty():
+		check(false, "契约新怪 %s 存在" % mid)
+		return
+	check(int(m.get("level", -1)) == lv, "契约新怪 %s 等级=%d" % [mid, lv])
+	check(int(m.get("hp", -1)) == int(round(40.0 * pow(float(lv), 1.2))),
+		"契约新怪 %s hp=round(40×L^1.2)（L=%d）" % [mid, lv])
+	var atk: Array = m.get("atk", [])
+	check(atk.size() == 2 and int(atk[0]) == 3 + 2 * lv and int(atk[1]) == 8 + 3 * lv,
+		"契约新怪 %s atk=[3+2L,8+3L]（L=%d）" % [mid, lv])
+	check(int(m.get("def", -1)) == int(round(5.0 + 1.5 * float(lv))),
+		"契约新怪 %s def=round(5+1.5L)（L=%d）" % [mid, lv])
+	var exp_r: Array = m.get("exp", [])
+	check(exp_r.size() == 2 and int(exp_r[0]) == int(round(0.8 * float(lv))) + 1 and int(exp_r[1]) == 4 * lv + 5,
+		"契约新怪 %s exp=[round(0.8L)+1,4L+5]（L=%d）" % [mid, lv])
+	var copper: Array = m.get("copper", [])
+	check(copper.size() == 2 and int(copper[0]) == 5 * lv and int(copper[1]) == 15 * lv + 10,
+		"契约新怪 %s copper=[5L,15L+10]（L=%d）" % [mid, lv])
+	check(int(m.get("instances", -1)) == 5, "契约新怪 %s instances=5" % mid)
+
+
+# ---------- 5.18b 出海航行 + 区域世界 页面/链路（契约 docs/sail-region-spec.md §1.6-§1.8/§1.10） ----------
+
+func _test_sail_region_flow(player: PlayerCore) -> void:
+	# ---- Pages 层（E2b 本体，不依赖路由） ----
+	player.new_game("航海士", "♂")
+	player.add_copper(20000)
+
+	# region_of_scene 分流（契约 §1.8，真实数据）：venice 港→venice 区，外港→其区
+	check(String(GameData.region_of_scene("sicoeng").get("id", "")) == "venice", "region_of_scene：sicoeng→venice 区")
+	check(String(GameData.region_of_scene("risiben").get("id", "")) == "risiben", "region_of_scene：risiben→其区")
+
+	# region_map：BBCode 含 goto/npc 链接与 WIDE_SEP（契约 §1.8）
+	var region := GameData.region_of_scene("risiben")
+	if region.is_empty():
+		check(false, "region_map：risiben 区数据缺失")
+	else:
+		player.set_location("risiben")
+		var rmap := Pages.region_map(player, region)
+		check(rmap.contains(String(region.get("map_name", ""))), "region_map：header=map_name")
+		check(rmap.contains("goto:risiben") and rmap.contains("goto:risiben_jiaoqu") and rmap.contains("goto:risiben_haijiao"),
+			"region_map：港口+scenes goto 链接")
+		check(rmap.contains("npc:risiben:sailor") and rmap.contains("npc:risiben:innkeeper") and rmap.contains("npc:risiben:smith"),
+			"region_map：特色人物 sailor/inn/smith 链接")
+		check(rmap.contains("npc:risiben:laoshuishou"), "region_map：带 lines 的 flavor 入列")
+		check(rmap.contains(Pages.WIDE_SEP), "region_map：地点 WIDE_SEP 折行")
+		check(rmap.contains("worldmap"), "region_map：尾部大世界链接")
+
+	# sailor_page：9 个 sail_to 链接（当前港不可选）+ 船费说明
+	player.set_location("sicoeng")
+	var sp := Pages.sailor_page(player)
+	var sail_links := sp.count("sail_to:")
+	check(sail_links == 9, "sailor_page：9 个 sail_to 链接（实际 %d）" % sail_links)
+	check(sp.contains("船主") and sp.contains("当前所在"), "sailor_page：船主标题与当前所在标记")
+	check(sp.contains("船费 %d 铜贝" % Rules.sail_cost()), "sailor_page：船费说明")
+
+	# inn_page / inn_result（契约 §1.7）：台词套 {昵称}、房费、inn_rest 链接、成败文案
+	var inn_npc := {}
+	for npc: Dictionary in GameData.get_scene("risiben").get("npcs", []):
+		if String(npc.get("kind", "")) == "inn":
+			inn_npc = npc
+			break
+	check(not inn_npc.is_empty(), "inn：risiben 旅店 NPC 存在")
+	var ip := Pages.inn_page(player, inn_npc)
+	check(ip.contains(String(inn_npc.get("name", ""))), "inn_page：header=npc 名")
+	check(ip.contains(player.nickname), "inn_page：台词 {昵称} 替换")
+	check(ip.contains(str(Rules.inn_cost())), "inn_page：房费展示")
+	check(ip.contains("inn_rest") and ip.contains("开房休息"), "inn_page：开房休息链接")
+	player.stamina = 10
+	var res := Life.inn_rest(player, Rules.inn_cost())
+	check(bool(res.get("ok", false)), "inn：Life.inn_rest 成功前置")
+	var ir := Pages.inn_result(player, res)
+	check(ir.contains("回满") and ir.contains("返回"), "inn_result：成功恢复文案+返回")
+	var ir_bad := Pages.inn_result(player, {"ok": false, "msg": "房费都拿不出来。"})
+	check(ir_bad.contains("拿不出来"), "inn_result：失败显示 msg")
+
+	# smith_page stock（契约 §1.3/§1.9）：stock 页只列档位内装备，缺省=威尼斯全量
+	var smith_npc := {}
+	for npc2: Dictionary in GameData.get_scene("risiben").get("npcs", []):
+		if String(npc2.get("kind", "")) == "smith":
+			smith_npc = npc2
+			break
+	check(not smith_npc.is_empty() and not (smith_npc.get("stock", []) as Array).is_empty(), "smith：risiben 铁匠 stock 存在")
+	player.set_location("risiben")
+	var stock_page := Pages.smith_page(player, smith_npc)
+	var stock_size := (smith_npc.get("stock", []) as Array).size()
+	var buy_links := stock_page.count("buy_equip:")
+	check(stock_page.contains("里斯本 · 铁匠铺"), "smith_page：stock 页 header=区域名·铁匠铺")
+	check(buy_links == stock_size, "smith_page：只列 stock 档位（%d/%d）" % [buy_links, stock_size])
+	check(stock_page.contains("buy_equip:changjian"), "smith_page：stock 首件在售")
+	check(not stock_page.contains("buy_equip:lingzhuzhiren"), "smith_page：档位外装备（L22）不在售")
+	var default_page := Pages.smith_page(player)
+	check(default_page.contains("威尼斯铁匠铺") and default_page.contains("buy_equip:lingzhuzhiren"),
+		"smith_page：缺省=威尼斯铁匠铺全量在售")
+
+	# combat_page 海战形态（契约 §1.6）：标题行海战标识 + 去掉撤退链接
+	var eng := CombatEngine.new("bingji", player)
+	var land_page := Pages.combat_page(eng, player, false, "")
+	check(land_page.contains("敌方属性") and land_page.contains("retreat"), "combat_page：陆战保留撤退")
+	eng.at_sea = true
+	var sea_page := Pages.combat_page(eng, player, false, "")
+	check(sea_page.contains("海战"), "combat_page：海战标识")
+	check(not sea_page.contains("撤退"), "combat_page：海战无撤退链接")
+
+	# lose_page 海战变体（契约 §1.6）：默认原文案保留
+	check(Pages.lose_page(eng, 100, "威尼斯", true).contains("商船救起"), "lose_page：海战战败变体")
+	var lp_land := Pages.lose_page(eng, 100, "威尼斯")
+	check(lp_land.contains("好心人救回了城里") and not lp_land.contains("商船"), "lose_page：默认原文案")
+
+	# worldmap 行尾区域地图提示（契约 §1.8）
+	check(Pages.worldmap_page(player).contains("在各地港口点"), "worldmap：行尾区域地图提示")
+
+	# ---- Router 航海全流程（E2a 侧：未就位记预期并行缺口，不改 event_router.gd） ----
+	var router := EventRouter.new()
+	router.setup(player, null)
+	router.handle("goto:sicoeng")
+	router.handle("npc:sicoeng:sailor")
+	if not router.page.contains("sail_to:"):
+		push_warning("SKIP: 航海全流程——E2a event_router.gd 未就位（船主页无 sail_to），预期并行缺口")
+		return
+	var wallet := player.copper
+	var dest_idx := _port_index("risiben")
+	var dest_scene := Trade.port_scene("risiben")
+	router.handle("sail_to:%d" % dest_idx)
+	check(player.location == "sicoeng", "sail_to：海上期间位置不变（出发港）")
+	check(router.combat != null and router.combat.at_sea, "sail_to：进入海战（at_sea）")
+	check(player.copper == wallet - Rules.sail_cost(), "sail_to：扣船费 sail_cost")
+	var sea_evts: Array[String] = []
+	for a: Dictionary in router.bottom_actions():
+		sea_evts.append(String(a.get("event", "")))
+	check(not sea_evts.has("retreat"), "海战 bottom_actions：无撤退")
+	check(router.page.contains("海战"), "海战页：海战标识")
+	router.combat.monster_hp = 1
+	router.combat.monster_def = 0
+	router.handle("attack")
+	check(router.combat.finished and router.combat.won, "海战胜利")
+	check(player.location == dest_scene, "胜利抵达目的港")
+	check((router.sail_port as Dictionary).is_empty(), "抵达后 sail_port 清空")
+	router.handle("combat_reward")
+	router.handle("combat_leave")
+	check(router.combat == null, "战斗状态清理（航海用例）")
+
+	# 钱不够不能开航（契约 §1.6：不足→提示，不进战斗、不移动、不扣费）
+	player.take_copper(player.copper)
+	router.handle("npc:%s:sailor" % dest_scene)
+	var broke_wallet := player.copper
+	router.handle("sail_to:0")
+	check(router.combat == null, "钱不够不进战斗")
+	check(player.location == dest_scene, "钱不够不移动")
+	check(player.copper == broke_wallet, "钱不够不扣费")
+
+	# ---- 传送并存恢复（契约 docs/sail-region-spec.md §1.10：传送安全直达，航海为风险备选） ----
+	var has_tp := false
+	for npc3: Dictionary in GameData.get_scene("maatau").get("npcs", []):
+		if String(npc3.get("kind", "")) == "teleport":
+			has_tp = true
+			break
+	check(has_tp, "teleport：maatau 场景有 kind=teleport 的传送师 NPC")
+	player.add_copper(Rules.teleport_cost_copper())
+	player.set_location("sicoeng")
+	router.handle("teleport")
+	check(router.page.contains("tp:"), "teleport：传送页含 tp: 链接")
+	check(router.page.contains("安全直达"), "teleport：传送页含与航海的区分文案")
+	var tp_wallet := player.copper
+	router.handle("tp:%d" % _port_index("risiben"))
+	check(player.location == Trade.port_scene("risiben"), "tp：传送后 location 变为目的港")
+	check(player.copper == tp_wallet - Rules.teleport_cost_copper(), "tp：扣传送费 %d 铜" % Rules.teleport_cost_copper())

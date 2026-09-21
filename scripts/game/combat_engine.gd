@@ -28,6 +28,9 @@ var exp_mult := 1
 var weapon_broke_name := ""
 ## 攻击术本场已用标记（契约 §4.2 cast_skill）
 var skill_used_this_fight := false
+## 海战标记（契约 docs/sail-region-spec.md §1.6）：出海遭遇战由路由层置位；
+## 海战判定/隐藏撤退/文案均归路由层，引擎只携带状态。
+var at_sea := false
 var log_lines: PackedStringArray = []
 
 

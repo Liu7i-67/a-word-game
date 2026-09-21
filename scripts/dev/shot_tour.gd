@@ -135,10 +135,13 @@ func run(main: Control) -> void:
 	_play(game, "sell_page")
 	await _shot("25_market_sell")
 
-	# 码头 / 传送 / 探险官
-	_play(game, "goto:maatau")
-	_play(game, "npc:maatau:teleporter")
-	await _shot("26_teleport")
+	# 船主页 / 传送页 / 探险官（sail-region 契约 §1.6 航海 + §1.10 传送并存恢复）
+	_play(game, "goto:sicoeng")
+	_play(game, "npc:sicoeng:sailor")
+	await _shot("26_sailor")
+	_play(game, "teleport")  # §1.10：传送师安全直达，与航海并存
+	await _shot("26b_teleport")
+	_play(game, "back_game")
 	_play(game, "goto:baksingmun")
 	_play(game, "npc:baksingmun:explorer")
 	await _shot("27_explorer")
@@ -177,19 +180,29 @@ func run(main: Control) -> void:
 		await _shot("36_insets_game")
 		game._safe_frame.set_simulated_insets(SafeAreaFrame.NO_INSETS)
 
-	# 航海贸易走查（契约 docs/trade-spec.md §9）：world 数据就位时补拍
-	# 37 港口市场页（含🔥抢手）/ 38 酒保情报页 / 39 传送页；缺失则跳过（联调补拍）
+	# 航海贸易走查（契约 docs/trade-spec.md §9 + docs/sail-region-spec.md §1.6）：
+	# 航海流取代传送——船主页 sail_to 出发 → 海战页（无撤退）→ 打赢抵达目的港；
+	# 37 港口市场页（含🔥抢手）/ 38 酒保情报页；缺失则跳过（联调补拍）
 	if GameData.world_ports.size() >= 2 and GameData.has_scene(String(GameData.world_ports[1].get("scene", ""))):
 		router.player.add_copper(500000)
 		var pscene := String(GameData.world_ports[1].get("scene", ""))
-		_play(game, "tp:1")
+		_play(game, "goto:sicoeng")
+		_play(game, "npc:sicoeng:sailor")
+		_play(game, "sail_to:1")
+		await _shot("39_sea_combat")
+		# 打赢海战抵达目的港：残血怪一击即胜，抵达 notice 与战利品走既有流程
+		if router.combat != null and not router.combat.finished:
+			router.combat.monster_hp = 1
+			router.combat.monster_def = 0
+		_play(game, "attack")
+		await _shot("39_arrival")
+		_play(game, "combat_reward")
+		_play(game, "combat_leave")
 		_play(game, "npc:%s:merchant" % pscene)
 		await _shot("37_trade_market")
 		_play(game, "npc:%s:barkeep" % pscene)
 		_play(game, "rumor")
 		await _shot("38_rumor")
-		_play(game, "npc:%s:teleporter" % pscene)
-		await _shot("39_teleport")
 	else:
 		_log("TOUR SKIP: world 数据未就位，跳过 37-39 航海贸易截图")
 	# 40 装备回收页（铁匠，任何数据状态都可拍）；补三把大环刀并成交一把，
@@ -279,6 +292,29 @@ func run(main: Control) -> void:
 	if gem_target >= 0:
 		_play(game, "smith_gem:%d" % gem_target)
 	await _shot("53_gem")
+
+	# 走查 54+：区域世界（sail-region 契约 §1.7/§1.8）——旅店页/住店后/区域地图/外港铁匠 stock
+	# _goto 无连通校验，可直接落到外港场景（跨港航行细节已由 39 截图覆盖）
+	var outer_port := ""
+	for port: Dictionary in GameData.world_ports:
+		var pid := String(port.get("id", ""))
+		if pid != Trade.VENICE and GameData.has_scene(String(port.get("scene", pid))):
+			outer_port = String(port.get("scene", pid))
+			break
+	if outer_port != "":
+		router.player.add_copper(100000)
+		_play(game, "goto:%s" % outer_port)
+		router.player.stamina = 1  # 先造低生活体力，住店后截图对比回满
+		_play(game, "npc:%s:innkeeper" % outer_port)
+		await _shot("54_inn")
+		_play(game, "inn_rest")
+		await _shot("55_inn_rest")
+		_play(game, "map")
+		await _shot("56_region_map")
+		_play(game, "npc:%s:smith" % outer_port)
+		await _shot("57_port_smith")
+	else:
+		_log("TOUR SKIP: 外港数据未就位，跳过 54-57 区域世界截图")
 
 	print("SHOT TOUR DONE -> ", _dir)
 	main.get_tree().quit(0)
