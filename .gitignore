@@ -1,0 +1,17 @@
+# Godot 4
+.godot/
+/android/
+*.tmp
+
+# 导出凭证与产物（含 keystore 密码，遵循 a-game 约定不入库）
+export_credentials.cfg
+builds/
+env/
+export_presets.cfg
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 开发截图走查产物
+.shots/

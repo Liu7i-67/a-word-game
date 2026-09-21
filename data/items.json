@@ -1,0 +1,49 @@
+{
+  "_doc": "物品/装备表。华丽弯刀数据为文档✅；小金丝藤仅知名称与暴率✅，属性为🔍推断补全；商品价格✅(26/31铜贝)，卖价为买入价50%(经济规范：买卖价差防无限套利)。",
+  "items": {
+    "hualiwandao1": {
+      "name": "华丽弯刀（1级）",
+      "type": "equip",
+      "desc": "外表华丽的长剑，能够增加怪物掉落物品的概率。",
+      "req_level": 1,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [9, 22],
+      "durability": 350,
+      "stack": 1
+    },
+    "xiaojinsiteng": {
+      "name": "小金丝藤",
+      "type": "equip",
+      "desc": "缠绕在农场谷垛上的金色软藤，看似柔弱，却格外坚韧。",
+      "req_level": 1,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [4, 10],
+      "durability": 200,
+      "stack": 1
+    },
+    "putaojiu": {
+      "name": "葡萄酒",
+      "type": "goods",
+      "desc": "威尼斯本地特产，酸涩中带着果香，地中海各港都认这口味道。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 26,
+      "sell_price": 13,
+      "tiers": [900, 450, 225]
+    },
+    "ganyouyou": {
+      "name": "橄榄油",
+      "type": "goods",
+      "desc": "地中海的金色液体，威尼斯商人最爱的硬通货。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 31,
+      "sell_price": 15,
+      "tiers": [900, 450, 225]
+    }
+  }
+}

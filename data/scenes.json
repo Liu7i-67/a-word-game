@@ -1,0 +1,382 @@
+{
+  "_doc": "威尼斯场景表，出口/NPC 分布按《游戏设计机制.md》§7.1；NPC 对白逐字取自 §8（占位 NPC 无文案，统一用原版占位语「暂未开放，请耐心等待。」）；场景描述文本为本复刻补写。locked=true 的出口在原版中被引用但无场景文件（未实现区域），只展示不可进入。",
+  "city_map_name": "威尼斯城内地图",
+  "ports": ["威尼斯", "里斯本", "亚历山大", "突尼斯", "马赛", "雅典", "伊斯坦堡", "阿尔及尔", "拉古扎", "伊斯坦布尔"],
+  "regions": ["地中海", "北海", "非洲", "东亚", "印度洋"],
+  "active_region": "地中海",
+  "scenes": [
+    {
+      "id": "baksingmun",
+      "name": "威尼斯北城门",
+      "short": "北城门",
+      "on_map": true,
+      "desc": "城门由粗大的石砖砌成，守卫倚着长戟打量过往的旅人。城外官道向北延伸，隐约可见矿山的轮廓。",
+      "exits": [
+        {"dir": "东", "to": "nungcoeng"},
+        {"dir": "西", "to": "oicingkiu"},
+        {"dir": "南", "to": "geoimankeoi"},
+        {"dir": "北", "name": "矿山", "locked": true}
+      ],
+      "npcs": [
+        {"id": "guard", "name": "守卫", "kind": "flavor", "lines": ["城外很危险，你要先做好战斗的准备。打开物品栏看看还有没有苹果和各种药水出去."]},
+        {"id": "explorer", "name": "探险官", "kind": "dungeon"}
+      ]
+    },
+    {
+      "id": "doucoeng",
+      "name": "威尼斯赌场",
+      "short": "赌场",
+      "on_map": true,
+      "desc": "水晶吊灯下人声鼎沸，骰盅声与欢呼声交织在一起。博彩MM站在柜台后冲你招手。",
+      "exits": [
+        {"dir": "东", "to": "zaugun"},
+        {"dir": "南", "to": "nganhong"},
+        {"dir": "北", "to": "gingcaatguk"}
+      ],
+      "npcs": [
+        {"id": "croupier", "name": "博彩MM", "kind": "casino"}
+      ]
+    },
+    {
+      "id": "dungsingmun",
+      "name": "威尼斯东城门",
+      "short": "东城门",
+      "on_map": true,
+      "desc": "东城门外传来隐约的潮声。守卫提醒你，海滩方向最近不太平。",
+      "exits": [
+        {"dir": "东", "name": "海滩", "locked": true},
+        {"dir": "西", "to": "faajyun"},
+        {"dir": "南", "name": "浅海", "locked": true},
+        {"dir": "北", "name": "暗礁", "locked": true}
+      ],
+      "npcs": [
+        {"id": "guard", "name": "守卫", "kind": "flavor", "lines": ["城外很危险，你要先做好战斗的准备。打开物品栏看看还有没有苹果和各种药水出去."]}
+      ]
+    },
+    {
+      "id": "faajyun",
+      "name": "威尼斯花园",
+      "short": "花园",
+      "on_map": true,
+      "desc": "大理石喷泉低声细语，玫瑰沿回廊攀爬。授业中介在凉亭里摇着扇子。",
+      "exits": [
+        {"dir": "东", "to": "dungsingmun"},
+        {"dir": "西", "to": "soengdim"}
+      ],
+      "npcs": [
+        {"id": "tutor", "name": "授业中介", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+      ]
+    },
+    {
+      "id": "fukleijyun",
+      "name": "威尼斯福利院",
+      "short": "福利院",
+      "on_map": true,
+      "desc": "白墙院落里飘着药草味，福利官正低头清点本周的账目。",
+      "exits": [
+        {"dir": "东", "to": "wonggung"},
+        {"dir": "西", "to": "gingcaatguk"},
+        {"dir": "南", "to": "zaugun"},
+        {"dir": "北", "to": "geoimankeoi"}
+      ],
+      "npcs": [
+        {"id": "officer", "name": "福利官", "kind": "welfare"}
+      ]
+    },
+    {
+      "id": "gaautong",
+      "name": "威尼斯教堂",
+      "short": "教堂",
+      "on_map": true,
+      "desc": "彩窗把阳光滤成圣洁的颜色，管风琴低鸣。神父在祭坛前为你留了位置。",
+      "exits": [
+        {"dir": "东", "name": "实验室", "locked": true},
+        {"dir": "南", "to": "naamsingmun"},
+        {"dir": "北", "to": "maatau"}
+      ],
+      "npcs": [
+        {"id": "priest", "name": "神父(免费治疗)", "kind": "church"},
+        {"id": "witness", "name": "证婚人", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+      ]
+    },
+    {
+      "id": "geoimankeoi",
+      "name": "威尼斯居民区",
+      "short": "居民区",
+      "on_map": true,
+      "desc": "低矮的砖房外晾着衣物，主妇们隔着巷子闲话家常。",
+      "exits": [
+        {"dir": "西", "to": "soengjipgaai"},
+        {"dir": "南", "to": "fukleijyun"},
+        {"dir": "北", "to": "baksingmun"}
+      ],
+      "npcs": []
+    },
+    {
+      "id": "gingcaatguk",
+      "name": "威尼斯警察局",
+      "short": "警察局",
+      "on_map": true,
+      "desc": "门口铁栅冷硬，局长伏案批阅卷宗，偶尔抬眼扫过访客。",
+      "exits": [
+        {"dir": "东", "to": "fukleijyun"},
+        {"dir": "南", "to": "doucoeng"},
+        {"dir": "北", "to": "soengjipgaai"}
+      ],
+      "npcs": [
+        {"id": "chief", "name": "局长", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+      ]
+    },
+    {
+      "id": "gwongcoeng",
+      "name": "威尼斯广场",
+      "short": "广场",
+      "on_map": true,
+      "desc": "鸽群在石板路上起落，行政官与指挥官在廊柱下交谈。",
+      "exits": [
+        {"dir": "东", "to": "soengdim"},
+        {"dir": "西", "to": "nganhong"},
+        {"dir": "南", "to": "maatau"},
+        {"dir": "北", "to": "zaugun"}
+      ],
+      "npcs": [
+        {"id": "prefect", "name": "行政官", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]},
+        {"id": "commander", "name": "指挥官", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+      ]
+    },
+    {
+      "id": "jingaujyun",
+      "name": "威尼斯研究院",
+      "short": "研究院",
+      "on_map": true,
+      "desc": "门前石阶被磨得发亮，里面传出羽毛笔的沙沙声。",
+      "exits": [
+        {"dir": "西", "to": "wonggung"}
+      ],
+      "npcs": []
+    },
+    {
+      "id": "maatau",
+      "name": "威尼斯★码头",
+      "short": "★码头",
+      "on_map": true,
+      "desc": "桅杆如林，咸风扑面。船老板叼着烟斗，传送师挂出了地中海的航线牌。",
+      "exits": [
+        {"dir": "东", "to": "zimsinguk"},
+        {"dir": "西", "to": "sicoeng"},
+        {"dir": "南", "to": "gaautong"},
+        {"dir": "南", "to": "gwongcoeng"}
+      ],
+      "npcs": [
+        {"id": "sailor", "name": "出航", "kind": "sail"},
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "bossman", "name": "船老板", "kind": "flavor", "lines": ["暂未开放区域，请耐心等待"]}
+      ]
+    },
+    {
+      "id": "naamsingmun",
+      "name": "威尼斯南城门",
+      "short": "南城门",
+      "on_map": true,
+      "desc": "南门外是开阔的草原与牧场，守卫懒洋洋地靠在门洞里。",
+      "exits": [
+        {"dir": "西", "name": "草原", "locked": true},
+        {"dir": "南", "name": "牧场", "locked": true},
+        {"dir": "北", "to": "gaautong"}
+      ],
+      "npcs": [
+        {"id": "guard", "name": "守卫", "kind": "flavor", "lines": ["城外很危险，你要先做好战斗的准备。打开物品栏看看还有没有苹果和各种药水出去."]}
+      ]
+    },
+    {
+      "id": "nganhong",
+      "name": "威尼斯银行",
+      "short": "银行",
+      "on_map": true,
+      "desc": "大理石立面庄重森严，铁门之后是全威尼斯最安全的金库。",
+      "exits": [
+        {"dir": "东", "to": "gwongcoeng"},
+        {"dir": "西", "to": "titzoengpou"},
+        {"dir": "南", "to": "sicoeng"},
+        {"dir": "北", "to": "doucoeng"}
+      ],
+      "npcs": [
+        {"id": "clerk", "name": "银行职员", "kind": "bank"}
+      ]
+    },
+    {
+      "id": "nungcoeng",
+      "name": "威尼斯农场",
+      "short": "农场",
+      "on_map": true,
+      "desc": "篱笆圈起的谷场堆着草垛，几只病鸡在泥地里扑腾，眼神不太友善。",
+      "exits": [
+        {"dir": "东", "name": "农场1", "locked": true},
+        {"dir": "北", "to": "baksingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "bingji", "count": 5}]
+    },
+    {
+      "id": "oicingkiu",
+      "name": "威尼斯爱情桥",
+      "short": "爱情桥",
+      "on_map": true,
+      "desc": "拱桥横跨运河，坚贞石碑上刻满恋人起誓的名字。",
+      "exits": [
+        {"dir": "东", "to": "baksingmun"},
+        {"dir": "南", "to": "soengjipgaai"}
+      ],
+      "npcs": [
+        {"id": "stone", "name": "坚贞石碑", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+      ]
+    },
+    {
+      "id": "saisingmun",
+      "name": "威尼斯西城门",
+      "short": "西城门",
+      "on_map": true,
+      "desc": "西城门外雾气弥漫，据说湿地深处藏着沼泽与荒野。",
+      "exits": [
+        {"dir": "东", "to": "titzoengpou"},
+        {"dir": "西", "name": "湿地", "locked": true},
+        {"dir": "南", "name": "荒野", "locked": true},
+        {"dir": "北", "name": "森林", "locked": true}
+      ],
+      "npcs": [
+        {"id": "guard", "name": "守卫", "kind": "flavor", "lines": ["城外很危险，你要先做好战斗的准备。打开物品栏看看还有没有苹果和各种药水出去."]}
+      ]
+    },
+    {
+      "id": "sicoeng",
+      "name": "威尼斯市场",
+      "short": "市场",
+      "on_map": true,
+      "desc": "摊位沿运河排开，葡萄酒与橄榄油的木箱堆得比人还高。供应商的嗓门盖过一切。",
+      "exits": [
+        {"dir": "东", "to": "maatau"},
+        {"dir": "北", "to": "nganhong"}
+      ],
+      "npcs": [
+        {"id": "vendor", "name": "供应商", "kind": "market"}
+      ]
+    },
+    {
+      "id": "soengdim",
+      "name": "威尼斯商店",
+      "short": "商店",
+      "on_map": true,
+      "desc": "货架上摆满进口的奇珍，商人正擦拭一只黄铜天平。",
+      "exits": [
+        {"dir": "东", "to": "faajyun"},
+        {"dir": "西", "to": "gwongcoeng"},
+        {"dir": "南", "to": "zimsinguk"},
+        {"dir": "北", "to": "zyuboudim"}
+      ],
+      "npcs": [
+        {"id": "merchant", "name": "商人", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+      ]
+    },
+    {
+      "id": "soengjipgaai",
+      "name": "威尼斯商业街",
+      "short": "商业街",
+      "on_map": true,
+      "desc": "店铺招牌层层叠叠，账房先生们夹着账本行色匆匆。",
+      "exits": [
+        {"dir": "东", "to": "geoimankeoi"},
+        {"dir": "南", "to": "gingcaatguk"},
+        {"dir": "北", "to": "oicingkiu"}
+      ],
+      "npcs": []
+    },
+    {
+      "id": "titzoengpou",
+      "name": "威尼斯铁匠铺",
+      "short": "铁匠铺",
+      "on_map": true,
+      "desc": "炉火映红半条巷子，锤声叮当不绝。铁匠抹了把汗朝你点点头。",
+      "exits": [
+        {"dir": "东", "to": "nganhong"},
+        {"dir": "西", "to": "saisingmun"}
+      ],
+      "npcs": [
+        {"id": "smith", "name": "铁匠", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+      ]
+    },
+    {
+      "id": "wonggung",
+      "name": "威尼斯王宫",
+      "short": "王宫",
+      "on_map": true,
+      "desc": "鎏金大门内侍卫林立，国王在露台上俯瞰他的水城。",
+      "exits": [
+        {"dir": "东", "to": "jingaujyun"},
+        {"dir": "西", "to": "fukleijyun"},
+        {"dir": "南", "to": "zyuboudim"}
+      ],
+      "npcs": [
+        {"id": "king", "name": "国王", "kind": "flavor", "lines": ["尊敬的{昵称}，你能光临这里我感到无比荣幸；"]}
+      ]
+    },
+    {
+      "id": "zaugun",
+      "name": "威尼斯酒馆",
+      "short": "酒馆",
+      "on_map": true,
+      "desc": "朗姆酒气与烤鱼香混在一起，水手们高谈着远方的传说。老板擦着杯子朝你一笑。",
+      "exits": [
+        {"dir": "东", "to": "zyuboudim"},
+        {"dir": "西", "to": "doucoeng"},
+        {"dir": "南", "to": "gwongcoeng"},
+        {"dir": "北", "to": "fukleijyun"}
+      ],
+      "npcs": [
+        {"id": "boss", "name": "老板(新手指引)", "kind": "flavor", "lines": ["，欢迎来到这个世界！我有不少朋友，或许能帮到你。最近福利院的福利官说每周都在发福利，无钱出门万事难，你去福利院看看吧。"]}
+      ]
+    },
+    {
+      "id": "zimsinguk",
+      "name": "威尼斯占星屋",
+      "short": "占星屋",
+      "on_map": true,
+      "desc": "星盘与水晶球挤满阁楼，女巫的猫眯着眼睛打量来客。",
+      "exits": [
+        {"dir": "西", "to": "maatau"},
+        {"dir": "南", "name": "实验室", "locked": true},
+        {"dir": "北", "to": "soengdim"}
+      ],
+      "npcs": [
+        {"id": "witch", "name": "女巫", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+      ]
+    },
+    {
+      "id": "zyuboudim",
+      "name": "威尼斯珠宝店",
+      "short": "珠宝店",
+      "on_map": true,
+      "desc": "丝绒托盘上宝石流转着微光，珠宝商用放大镜打量每一位置办人。",
+      "exits": [
+        {"dir": "西", "to": "zaugun"},
+        {"dir": "南", "to": "soengdim"},
+        {"dir": "北", "to": "wonggung"}
+      ],
+      "npcs": [
+        {"id": "jeweler", "name": "珠宝商", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+      ]
+    },
+    {
+      "id": "zyuzaakkeoi",
+      "name": "威尼斯住宅区",
+      "short": "住宅区",
+      "on_map": true,
+      "desc": "高墙深院，通往古村落的路上野草蔓生。",
+      "exits": [
+        {"dir": "东", "name": "古村落", "locked": true},
+        {"dir": "南", "name": "沼泽", "locked": true},
+        {"dir": "北", "name": "后山", "locked": true}
+      ],
+      "npcs": []
+    }
+  ]
+}

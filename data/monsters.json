@@ -1,0 +1,17 @@
+{
+  "_doc": "怪物表。病鸡数值为文档✅(体力40/攻击1-8/防御8/经验1-9/暴率50%)；胜利掉落铜贝区间与农场刷新数量为🔍推断补全。",
+  "monsters": {
+    "bingji": {
+      "name": "病鸡",
+      "level": 1,
+      "hp": 40,
+      "atk": [1, 8],
+      "def": 8,
+      "exp": [1, 9],
+      "copper": [5, 30],
+      "drop_rate": 50,
+      "drop_item": "xiaojinsiteng",
+      "instances": 5
+    }
+  }
+}

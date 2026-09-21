@@ -1,0 +1,51 @@
+{
+  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。",
+  "start": {
+    "scene": "zaugun",
+    "level": 1,
+    "hp": 100,
+    "copper": 0,
+    "gold": 0,
+    "bank_silver": 0,
+    "sin": 0,
+    "weapon": "hualiwandao1"
+  },
+  "growth": {
+    "exp_base": 500,
+    "exp_step": 500,
+    "hp_base": 100,
+    "hp_per_level": 20,
+    "atk_min_base": 5,
+    "atk_min_per_level": 2,
+    "atk_max_base": 15,
+    "atk_max_per_level": 5,
+    "def_base": 0,
+    "def_per_level": 1,
+    "weight_base": 100,
+    "weight_per_level": 10
+  },
+  "combat": {
+    "retreat_cost_per_level": 10,
+    "death_loss_ratio_pct": 10,
+    "death_loss_min": 1,
+    "death_loss_max": 5000,
+    "revive_ratio_pct": 50,
+    "revive_scene": "gaautong"
+  },
+  "economy": {
+    "copper_per_silver": 100,
+    "welfare_copper": 10000,
+    "heal_amount": 50,
+    "confess_reduce": 10,
+    "casino_bet": 200,
+    "casino_win": 1000,
+    "sell_ratio_pct": 50
+  },
+  "teleport": {
+    "cost_silver": 10
+  },
+  "ui": {
+    "click_cooldown_ms": 250,
+    "link_color": "#3d7edb"
+  }
+}
