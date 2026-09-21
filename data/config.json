@@ -1,5 +1,5 @@
 {
-  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。本轮增补(扩展契约§3.4)：economy.repair_cost_per_point=铁匠修理单价；combat.dungeon_*=地宫挑战(击杀目标/时限/通关奖励)。本轮增补(贸易契约§1-§7)：trade.*=港口定价(特产折扣85%/热门倍率180%/每港每日热门2个)；teleport.cost_copper=跨港传送船票铜贝价(文案仍写10银，cost_silver仅作展示)；economy.rumor_cost=酒保打听行情一次的价钱；economy.equip_sell_ratio_pct=装备回收购价为基准价的百分比。本轮增补(交互优化)：combat.auto_stop_hp_pct=自动战斗体力终止阈值(百分比，低于即停)；ui.auto_tick_ms=自动战斗每步间隔(模拟人手速)。",
+  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。本轮增补(扩展契约§3.4)：economy.repair_cost_per_point=铁匠修理单价；combat.dungeon_*=地宫挑战(击杀目标/时限/通关奖励)。本轮增补(贸易契约§1-§7)：trade.*=港口定价(特产折扣85%/热门倍率180%/每港每日热门2个)；teleport.cost_copper=跨港传送船票铜贝价(文案仍写10银，cost_silver仅作展示)；economy.rumor_cost=酒保打听行情一次的价钱；economy.equip_sell_ratio_pct=装备回收购价为基准价的百分比。本轮增补(交互优化)：combat.auto_stop_hp_pct=自动战斗体力终止阈值(百分比，低于即停)；ui.auto_tick_ms=自动战斗每步间隔(模拟人手速)。本轮增补(内容契约plan-v2§2.4)：life.*=生活系统，体力/打坐/钓鱼/种田/潜水数值✅物品文案硬证据(体力宝80000/打坐野球草人/小鱼活饵/牧草种子/潜水海皇)，阈值与权重表为🔍；smith.*=装备强化上限与铜贝价(强化后绑定✅龙泉水文案)、alchemy炼金兑换配方🔍；quest.*=安德鲁试炼/西利亚海皇任务/每日谜语(🔍玩法推断，谜面为复刻自拟)；combat 新增 momentum_*/dodge_*/lucky_*/skill_* 字段=战斗扩展(士气/闪避/幸运一击/攻击术，🔍七件套同构推断)。",
   "start": {
     "scene": "zaugun",
     "level": 1,
@@ -35,7 +35,76 @@
     "dungeon_kill_goal": 40,
     "dungeon_time_limit_sec": 3000,
     "dungeon_reward_copper": 20000,
-    "dungeon_reward_gold": 1
+    "dungeon_reward_gold": 1,
+    "momentum_max": 10,
+    "momentum_atk_pct_per": 1,
+    "dodge_pct_per_agi": 1,
+    "dodge_pct_max": 20,
+    "lucky_pct_per": 1,
+    "lucky_mult_pct": 200,
+    "skill_stamina": 50,
+    "skill_mult_pct": 150
+  },
+  "life": {
+    "stamina_max": 1000,
+    "stamina_per_level": 50,
+    "meditate_stamina": 100,
+    "meditate_exp_per_level": 20,
+    "fish_stamina": 30,
+    "dive_stamina": 40,
+    "farm_stamina": 20,
+    "farm_plots": 4,
+    "farm_grow_sec": 600,
+    "farm_harvest_count": 3,
+    "auto_stamina_pct": 50,
+    "tili_bao_limit": 2,
+    "fish_scenes": ["haitan", "tsienhoi", "ngoanzo", "maatau"],
+    "dive_scenes": ["tsienhoi", "ngoanzo"],
+    "fish_table": [
+      {"id": "xiaoyu", "w": 45},
+      {"id": "daiyu", "w": 30},
+      {"id": "zhangyu", "w": 17},
+      {"id": "jinqiangyu", "w": 6},
+      {"id": "xiaoyu_huoer", "w": 2}
+    ],
+    "fish_table_bait": [
+      {"id": "daiyu", "w": 30},
+      {"id": "zhangyu", "w": 30},
+      {"id": "jinqiangyu", "w": 28},
+      {"id": "xiaoyu_huoer", "w": 10},
+      {"id": "zhenzhu", "w": 2}
+    ],
+    "dive_table": [
+      {"id": "nothing", "w": 50},
+      {"id": "xiaoyu", "w": 20},
+      {"id": "zhenzhu", "w": 20},
+      {"id": "monster:hai_yao", "w": 7},
+      {"id": "haihuang_suipian", "w": 3}
+    ]
+  },
+  "smith": {
+    "enhance_max": 7,
+    "enhance_copper": 200,
+    "alchemy": [
+      {"give": {"xuantie": 2, "shajinshi": 3, "copper": 500}, "get": {"id": "longquanshui", "n": 1}},
+      {"give": {"canjian": 1, "lianjinzha": 2, "copper": 300}, "get": {"id": "hongbaoshi", "n": 1}},
+      {"give": {"duyan": 2, "copper": 300}, "get": {"id": "lanbaoshi", "n": 1}},
+      {"give": {"zhenzhu": 1, "copper": 200}, "get": {"id": "zibaoshi", "n": 1}}
+    ]
+  },
+  "quest": {
+    "andrew_kills": 10,
+    "andrew_reward_copper": 1000,
+    "siren_shards": 3,
+    "siren_reward": {"longquanshui": 3, "shuangbei_jingyanka": 1},
+    "riddle_reward_copper": 500,
+    "riddles": [
+      {"q": "有头无颈，有眼无眉，无脚能行，有翅难飞。（打一动物）", "a": "鱼"},
+      {"q": "白天草里住，晚上空中游，金光闪闪动，小尾灯一盏。（打一昆虫）", "a": "萤火虫"},
+      {"q": "小小诸葛亮，独坐军中帐，摆下八卦阵，专捉飞来将。（打一动物）", "a": "蜘蛛"},
+      {"q": "一物生来强，每天织网忙，织完静静坐，专等蚊虫撞。（打一动物）", "a": "蜘蛛"},
+      {"q": "身穿黑礼服，白肚皮在外，走路摇摆摆，冰海把家住。（打一动物）", "a": "企鹅"}
+    ]
   },
   "economy": {
     "copper_per_silver": 100,

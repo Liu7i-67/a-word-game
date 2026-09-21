@@ -200,6 +200,78 @@ func run(main: Control) -> void:
 		_play(game, "sell_equip:%d" % dup_idx)
 	await _shot("40_sell_equip")
 
+	# 走查 41+：生活系统 / 酒馆新 NPC / 大世界 / 强化宝石（契约 plan-v2 §6）
+	_play(game, "goto:zaugun")
+	_play(game, "npc:zaugun:boss")
+	await _shot("41_tavern_boss")
+	_play(game, "npc:zaugun:deluoxi")
+	await _shot("42_circus")
+	_play(game, "npc:zaugun:andedalu")
+	await _shot("43_trainer")
+	_play(game, "npc:zaugun:xiliya")
+	await _shot("44_siren")
+	_play(game, "npc:zaugun:aobupasi")
+	await _shot("45_riddle")
+	_play(game, "goto:soenmon")
+	_play(game, "npc:soenmon:zhushou")
+	await _shot("46_alchemy")
+
+	# 打坐：补野球草人与等级，任意无怪场景出「打坐」入口
+	router.player.add_stack("yeqiu_caoren", 1)
+	router.player.add_exp(25000)
+	router.player.add_copper(200000)
+	router.player.stamina = router.player.max_stamina()
+	_play(game, "goto:zaugun")
+	_play(game, "meditate")
+	await _shot("47_meditate")
+
+	# 钓鱼（用活饵）
+	router.player.add_stack("xiaoyu_huoer", 5)
+	router.player.stamina = router.player.max_stamina()
+	_play(game, "goto:haitan")
+	_play(game, "fish:bait")
+	await _shot("48_fishing")
+
+	# 种田：播种第一块地
+	router.player.add_stack("mucao_zhongzi", 4)
+	router.player.stamina = router.player.max_stamina()
+	_play(game, "goto:nungcoeng")
+	_play(game, "farm")
+	_play(game, "farm_plant:0")
+	await _shot("49_farm")
+
+	# 潜水（临时把潜水表定死为珍珠，避免随机起战斗干扰截图；拍完还原）
+	var dive_cfg: Dictionary = GameData.config.get("life", {})
+	var saved_dive: Array = (dive_cfg.get("dive_table", []) as Array).duplicate()
+	dive_cfg["dive_table"] = [{"id": "zhenzhu", "w": 100}]
+	router.player.stamina = router.player.max_stamina()
+	_play(game, "goto:tsienhoi")
+	_play(game, "dive")
+	await _shot("50_dive")
+	dive_cfg["dive_table"] = saved_dive
+
+	# 大世界地图（只读展示页）
+	_play(game, "worldmap")
+	await _shot("51_worldmap")
+
+	# 铁匠强化 + 宝石镶嵌（补龙泉水/宝石/带插槽护甲）
+	router.player.add_stack("longquanshui", 9)
+	router.player.add_stack("lanbaoshi", 2)
+	router.player.add_equip("cuzhitongkui")
+	_play(game, "goto:titzoengpou")
+	_play(game, "npc:titzoengpou:smith")
+	_play(game, "smith_enhance")
+	await _shot("52_enhance")
+	var gem_target := -1
+	for i in router.player.equips.size():
+		if int(GameData.get_item(String(router.player.equips[i].get("id", ""))).get("slots", 0)) > 0:
+			gem_target = i
+			break
+	_play(game, "smith_gem")
+	if gem_target >= 0:
+		_play(game, "smith_gem:%d" % gem_target)
+	await _shot("53_gem")
+
 	print("SHOT TOUR DONE -> ", _dir)
 	main.get_tree().quit(0)
 

@@ -1,5 +1,5 @@
 {
-  "_doc": "怪物表。病鸡数值为文档✅(体力40/攻击1-8/防御8/经验1-9/暴率50%)；胜利掉落铜贝区间与农场刷新数量为🔍推断补全。城外野外17种怪按扩展契约§2公式生成：hp=round(40*L^1.2)、atk=[3+2L,8+3L]、def=round(5+1.5L)、exp=[round(0.8L)+1,4L+5]、copper=[5L,15L+10]，instances一律5；drop_equip为武器掉落(独立于drop_item材料掉落)。",
+  "_doc": "怪物表。病鸡数值为文档✅(体力40/攻击1-8/防御8/经验1-9/暴率50%)；胜利掉落铜贝区间与农场刷新数量为🔍推断补全。城外野外17种怪按扩展契约§2公式生成：hp=round(40*L^1.2)、atk=[3+2L,8+3L]、def=round(5+1.5L)、exp=[round(0.8L)+1,4L+5]、copper=[5L,15L+10]，instances一律5；drop_equip为武器掉落(独立于drop_item材料掉落)。本轮增补(内容契约plan-v2§2.2)：新增矿洞/废墟/堡垒7怪(公式同上)；poison=命中后附加固定毒伤(🔍E1结算)，du_she 增 poison:8、duwu_bianfu poison:10；新材料掉落引 items 新 id(宝石/野球草人/体力宝)。主进程裁决补全：堡垒三怪增 drop_equip 高阶装备(守卫→玄铁甲@8%、黑暗骑士→暗鳞巨刃@8%、领主→领主之刃@12%)，材料掉落 tili_bao@5% 保留。",
   "monsters": {
     "bingji": {
       "name": "病鸡",
@@ -83,6 +83,7 @@
       "exp": [6, 29],
       "copper": [30, 100],
       "drop_rate": 50,
+      "poison": 8,
       "drop_item": "duyan",
       "instances": 5
     },
@@ -217,6 +218,94 @@
       "copper": [40, 130],
       "drop_rate": 0,
       "drop_item": "",
+      "instances": 5
+    },
+    "kuangshu": {
+      "name": "矿鼠",
+      "level": 8,
+      "hp": 485,
+      "atk": [19, 32],
+      "def": 17,
+      "exp": [7, 37],
+      "copper": [40, 130],
+      "drop_rate": 6,
+      "drop_item": "lanbaoshi",
+      "instances": 5
+    },
+    "duwu_bianfu": {
+      "name": "毒雾蝙蝠",
+      "level": 11,
+      "hp": 711,
+      "atk": [25, 41],
+      "def": 22,
+      "exp": [10, 49],
+      "copper": [55, 175],
+      "drop_rate": 6,
+      "poison": 10,
+      "drop_item": "lvbaoshi",
+      "instances": 5
+    },
+    "feixu_kulou": {
+      "name": "废墟骷髅",
+      "level": 13,
+      "hp": 869,
+      "atk": [29, 47],
+      "def": 25,
+      "exp": [11, 57],
+      "copper": [65, 205],
+      "drop_rate": 5,
+      "drop_item": "yeqiu_caoren",
+      "instances": 5
+    },
+    "anying_wuling": {
+      "name": "暗影亡灵",
+      "level": 16,
+      "hp": 1114,
+      "atk": [35, 56],
+      "def": 29,
+      "exp": [14, 69],
+      "copper": [80, 250],
+      "drop_rate": 5,
+      "drop_item": "zibaoshi",
+      "instances": 5
+    },
+    "baolei_shouwei": {
+      "name": "堡垒守卫",
+      "level": 18,
+      "hp": 1283,
+      "atk": [39, 62],
+      "def": 32,
+      "exp": [15, 77],
+      "copper": [90, 280],
+      "drop_rate": 5,
+      "drop_item": "tili_bao",
+      "drop_equip": {"id": "xuantiejia", "rate": 8},
+      "instances": 5
+    },
+    "hei_an_qishi": {
+      "name": "黑暗骑士",
+      "level": 20,
+      "hp": 1456,
+      "atk": [43, 68],
+      "def": 35,
+      "exp": [17, 85],
+      "copper": [100, 310],
+      "drop_rate": 5,
+      "drop_item": "tili_bao",
+      "drop_equip": {"id": "anlinjuren", "rate": 8},
+      "instances": 5
+    },
+    "baolei_lingzhu": {
+      "name": "堡垒领主",
+      "level": 22,
+      "hp": 1633,
+      "atk": [47, 74],
+      "def": 38,
+      "exp": [19, 93],
+      "copper": [110, 340],
+      "drop_rate": 5,
+      "drop_item": "tili_bao",
+      "drop_equip": {"id": "lingzhuzhiren", "rate": 12},
       "instances": 5
     }
   }

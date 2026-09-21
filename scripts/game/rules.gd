@@ -206,3 +206,185 @@ static func _version_tuple(v: String) -> Array[int]:
 	for i in mini(parts.size(), 3):
 		out[i] = maxi(String(parts[i]).to_int(), 0)
 	return out
+
+
+## ---------- 生活系统（契约 plan-v2 §2.4 life 节，缺省兜底与 config 同值） ----------
+
+static func life_stamina_max() -> int:
+	return maxi(int(section("life").get("stamina_max", 1000)), 1)
+
+
+static func life_stamina_per_level() -> int:
+	return maxi(int(section("life").get("stamina_per_level", 50)), 0)
+
+
+static func life_meditate_stamina() -> int:
+	return maxi(int(section("life").get("meditate_stamina", 100)), 0)
+
+
+static func life_meditate_exp_per_level() -> int:
+	return maxi(int(section("life").get("meditate_exp_per_level", 20)), 0)
+
+
+static func life_fish_stamina() -> int:
+	return maxi(int(section("life").get("fish_stamina", 30)), 0)
+
+
+static func life_dive_stamina() -> int:
+	return maxi(int(section("life").get("dive_stamina", 40)), 0)
+
+
+static func life_farm_stamina() -> int:
+	return maxi(int(section("life").get("farm_stamina", 20)), 0)
+
+
+static func life_farm_plots() -> int:
+	return maxi(int(section("life").get("farm_plots", 4)), 0)
+
+
+static func life_farm_grow_sec() -> int:
+	return maxi(int(section("life").get("farm_grow_sec", 600)), 0)
+
+
+static func life_farm_harvest_count() -> int:
+	return maxi(int(section("life").get("farm_harvest_count", 3)), 0)
+
+
+## 体力低于该百分比时自动吃奶瓶/体力宝（🔍原版文案）
+static func life_auto_stamina_pct() -> int:
+	return clampi(int(section("life").get("auto_stamina_pct", 50)), 0, 100)
+
+
+## 体力宝限持个数（🔍原版文案：每人限 2 个，buy/gift 入包时校验）
+static func life_tili_bao_limit() -> int:
+	return maxi(int(section("life").get("tili_bao_limit", 2)), 0)
+
+
+static func _life_array(key: String, fallback: Array) -> Array:
+	var v: Variant = section("life").get(key, fallback)
+	return (v as Array).duplicate(true) if v is Array else fallback.duplicate(true)
+
+
+static func life_fish_scenes() -> Array:
+	return _life_array("fish_scenes", ["haitan", "tsienhoi", "ngoanzo", "maatau"])
+
+
+static func life_dive_scenes() -> Array:
+	return _life_array("dive_scenes", ["tsienhoi", "ngoanzo"])
+
+
+static func life_fish_table() -> Array:
+	return _life_array("fish_table", [
+		{"id": "xiaoyu", "w": 45}, {"id": "daiyu", "w": 30}, {"id": "zhangyu", "w": 17},
+		{"id": "jinqiangyu", "w": 6}, {"id": "xiaoyu_huoer", "w": 2},
+	])
+
+
+static func life_fish_table_bait() -> Array:
+	return _life_array("fish_table_bait", [
+		{"id": "daiyu", "w": 30}, {"id": "zhangyu", "w": 30}, {"id": "jinqiangyu", "w": 28},
+		{"id": "xiaoyu_huoer", "w": 10}, {"id": "zhenzhu", "w": 2},
+	])
+
+
+static func life_dive_table() -> Array:
+	return _life_array("dive_table", [
+		{"id": "nothing", "w": 50}, {"id": "xiaoyu", "w": 20}, {"id": "zhenzhu", "w": 20},
+		{"id": "monster:hai_yao", "w": 7}, {"id": "haihuang_suipian", "w": 3},
+	])
+
+
+## ---------- 铁匠强化/炼金（契约 plan-v2 §2.4 smith 节） ----------
+
+static func smith_enhance_max() -> int:
+	return maxi(int(section("smith").get("enhance_max", 7)), 0)
+
+
+static func smith_enhance_copper() -> int:
+	return maxi(int(section("smith").get("enhance_copper", 200)), 0)
+
+
+## 每级强化攻击/防御加成百分比（契约 §4.1 锁定值，不进 config）
+static func smith_enhance_pct_per() -> int:
+	return 5
+
+
+static func smith_alchemy() -> Array:
+	return _life_array_alike("smith", "alchemy", [])
+
+
+## ---------- 任务链/谜语（契约 plan-v2 §2.4 quest 节） ----------
+
+static func quest_andrew_kills() -> int:
+	return maxi(int(section("quest").get("andrew_kills", 10)), 0)
+
+
+static func quest_andrew_reward_copper() -> int:
+	return maxi(int(section("quest").get("andrew_reward_copper", 1000)), 0)
+
+
+static func quest_siren_shards() -> int:
+	return maxi(int(section("quest").get("siren_shards", 3)), 0)
+
+
+static func quest_siren_reward() -> Dictionary:
+	var v: Variant = section("quest").get("siren_reward", {"longquanshui": 3, "shuangbei_jingyanka": 1})
+	return (v as Dictionary).duplicate(true) if v is Dictionary else {"longquanshui": 3, "shuangbei_jingyanka": 1}
+
+
+static func quest_riddle_reward_copper() -> int:
+	return maxi(int(section("quest").get("riddle_reward_copper", 500)), 0)
+
+
+## 谜语库（第 5 条由 D1 重写，兜底只保留可确证的 4 条）
+static func quest_riddles() -> Array:
+	return _life_array_alike("quest", "riddles", [
+		{"q": "有头无颈，有眼无眉，无脚能行，有翅难飞。（打一动物）", "a": "鱼"},
+		{"q": "白天草里住，晚上空中游，金光闪闪动，小尾灯一盏。（打一昆虫）", "a": "萤火虫"},
+		{"q": "小小诸葛亮，独坐军中帐，摆下八卦阵，专捉飞来将。（打一动物）", "a": "蜘蛛"},
+		{"q": "一物生来强，每天织网忙，织完静静坐，专等蚊虫撞。（打一动物）", "a": "蜘蛛"},
+	])
+
+
+static func _life_array_alike(section_name: String, key: String, fallback: Array) -> Array:
+	var v: Variant = section(section_name).get(key, fallback)
+	return (v as Array).duplicate(true) if v is Array else fallback.duplicate(true)
+
+
+## ---------- 战斗扩展（契约 plan-v2 §2.4 combat 节新增字段） ----------
+
+## 士气上限（连胜每场 +1 攻击%，封顶）
+static func combat_momentum_max() -> int:
+	return maxi(int(section("combat").get("momentum_max", 10)), 0)
+
+
+static func combat_momentum_atk_pct_per() -> int:
+	return maxi(int(section("combat").get("momentum_atk_pct_per", 1)), 0)
+
+
+static func combat_dodge_pct_per_agi() -> int:
+	return maxi(int(section("combat").get("dodge_pct_per_agi", 1)), 0)
+
+
+## 闪避率上限（%）：敏捷减伤封顶
+static func combat_dodge_pct_max() -> int:
+	return clampi(int(section("combat").get("dodge_pct_max", 20)), 0, 100)
+
+
+static func combat_lucky_pct_per() -> int:
+	return maxi(int(section("combat").get("lucky_pct_per", 1)), 0)
+
+
+## 幸运一击伤害倍率（%）
+static func combat_lucky_mult_pct() -> int:
+	return maxi(int(section("combat").get("lucky_mult_pct", 200)), 100)
+
+
+## 攻击术体力消耗
+static func combat_skill_stamina() -> int:
+	return maxi(int(section("combat").get("skill_stamina", 50)), 0)
+
+
+## 攻击术伤害倍率（%）
+static func combat_skill_mult_pct() -> int:
+	return maxi(int(section("combat").get("skill_mult_pct", 150)), 100)

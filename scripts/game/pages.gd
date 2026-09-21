@@ -10,6 +10,59 @@ const SEP := " . "
 ## 比正文（26）大一号并配合 PageView 行距，让可点击行高≈按钮高
 const LINK_FONT_SIZE := 30
 
+## 农场场景 id（契约 plan-v2 §5.3：nungcoeng 四块田）
+const FARM_SCENE := "nungcoeng"
+## 引路蜂物品 id（契约 §5.9：使用→野外传送列表）
+const TP_BEE_ID := "yinlu_feng"
+## 海皇碎片物品 id（契约 §5.4：集 3 交西利亚）
+const SIREN_SHARD_ID := "haihuang_suipian"
+
+## 品质颜色（契约 plan-v2 §5.12）：1-6=白/绿/蓝/紫/橙/红；
+## 数据表 quality 兼容数字档位与中文档名（现有装备写「普通」等中文字符串）
+const QUALITY_COLORS := {
+	1: "#e8e8e8", 2: "#6fd66f", 3: "#4da6ff", 4: "#c07cff", 5: "#ff9900", 6: "#ff4040",
+	"普通": "#e8e8e8", "精良": "#6fd66f", "稀有": "#4da6ff", "完美": "#c07cff", "史诗": "#ff9900", "传奇": "#ff4040",
+}
+
+const QUALITY_NAMES := {1: "普通", 2: "精良", 3: "稀有", 4: "完美", 5: "史诗", 6: "传奇"}
+
+const GEM_BONUS_LABELS := {"atk": "攻击", "def": "防御", "agi": "敏捷", "hp": "体力"}
+
+
+## 品质颜色值（数字档位与中文档名都认；无品质返回 ""=不着色）
+static func quality_color(def: Dictionary) -> String:
+	var q: Variant = def.get("quality", 0)
+	if QUALITY_COLORS.has(q):
+		return String(QUALITY_COLORS[q])
+	return String(QUALITY_COLORS.get(int(q), ""))
+
+
+## 品质档名（数字转中文；中文字符串原样）
+static func quality_label(def: Dictionary) -> String:
+	var q: Variant = def.get("quality", "")
+	if q is String:
+		return String(q)
+	var n := int(q)
+	return String(QUALITY_NAMES.get(n, ""))
+
+
+## 品质着色的名称文本（装备/宝石名称着色用；无品质则原样转义）
+static func quality_name(def: Dictionary, id: String) -> String:
+	var label := String(def.get("name", id))
+	var color := quality_color(def)
+	if color == "":
+		return esc(label)
+	return "[color=%s]%s[/color]" % [color, esc(label)]
+
+
+## 品质着色的链接（同 link()，但文字用品质色；无品质回退默认链接色）
+static func quality_link(event: String, def: Dictionary, label: String = "") -> String:
+	var text := label if label != "" else String(def.get("name", ""))
+	var color := quality_color(def)
+	if color == "":
+		return link(event, text)
+	return "[color=%s][url=%s][font_size=%d]%s[/font_size][/url][/color]" % [color, event, LINK_FONT_SIZE, esc(text)]
+
 
 static func esc(s: String) -> String:
 	# 先换占位符再还原：防止插入的 [lb]/[rb] 自身被二次替换（标签含 [] 时）
@@ -164,9 +217,40 @@ static func scene_page(player: PlayerCore, scene_id: String) -> String:
 		lines.append("")
 		lines.append(header("出口"))
 		lines.append(exits_block(exits))
+	var life_block := life_links(player, String(scene.get("id", "")))
+	if not life_block.is_empty():
+		lines.append("")
+		lines.append(header("生活"))
+		lines.append(SEP.join(PackedStringArray(life_block)))
 	lines.append("")
 	lines.append(footer())
 	return join_lines(lines)
+
+
+## 场景页生活玩法条件入口（契约 plan-v2 §5.1-§5.4）：
+## 无怪场景且满足打坐条件→打坐；fish/dive 场景→钓鱼(用活饵)/潜水；农场→种田
+static func life_links(player: PlayerCore, scene_id: String) -> Array[String]:
+	var links: Array[String] = []
+	var monsters: Array = GameData.get_scene(scene_id).get("monsters", [])
+	if monsters.is_empty() and meditate_ready(player):
+		links.append(link("meditate", "打坐"))
+	if Rules.life_fish_scenes().has(scene_id):
+		links.append(link("fish", "钓鱼"))
+		links.append(link("fish:bait", "用活饵钓鱼"))
+	if Rules.life_dive_scenes().has(scene_id):
+		links.append(link("dive", "潜水"))
+	if scene_id == FARM_SCENE:
+		links.append(link("farm", "农场"))
+	return links
+
+
+## 打坐条件（契约 §5.2）：持野球草人 + 等级达 req_level
+static func meditate_ready(player: PlayerCore) -> bool:
+	var def := GameData.get_item(Life.MEDITATE_TOOL_ID)
+	if def.is_empty() or player.count_stack(Life.MEDITATE_TOOL_ID) <= 0:
+		return false
+	var eff: Dictionary = def.get("effect", {})
+	return player.level >= maxi(int(eff.get("req_level", 10)), 1)
 
 
 static func exits_block(exits: Array) -> String:
@@ -213,6 +297,10 @@ static func status_page(player: PlayerCore) -> String:
 	lines.append("防御：%d" % player.defense())
 	lines.append("装备：%s" % esc(hand_name))
 	lines.append("负重：%d/%d" % [player.weight(), player.weight_cap()])
+	lines.append("生活体力：%d/%d" % [player.stamina, player.max_stamina()])
+	if player.streak > 0:
+		lines.append("[color=#ffd700]连胜：%d  士气：攻击+%d%%[/color]" % [
+			player.streak, player.momentum * Rules.combat_momentum_atk_pct_per()])
 	lines.append("铜贝：%d  金贝：%d  银行存款：%d银贝" % [player.copper, player.gold, player.bank_silver])
 	lines.append("罪恶：%d" % player.sin)
 	lines.append("")
@@ -244,22 +332,51 @@ static func items_page(player: PlayerCore, cat: String) -> String:
 				lines.append(dim("暂无装备。"))
 			for i in player.equips.size():
 				var inst := player.equips[i]
-				var def := GameData.get_item(String(inst.get("id", "")))
+				var id := String(inst.get("id", ""))
+				var def := GameData.get_item(id)
 				var max_dur := maxi(int(def.get("durability", 1)), 1)
-				var marker := "（手持）" if i == player.hand else ""
-				var label := "%s%s 耐久%d/%d" % [player.item_name(String(inst.get("id", ""))), marker, int(inst.get("dur", 0)), max_dur]
-				lines.append(link("equip_view:%d" % i, label))
+				var tag := _equip_tag(i, player)
+				var label := "%s%s 耐久%d/%d" % [String(def.get("name", id)), tag, int(inst.get("dur", 0)), max_dur]
+				lines.append(quality_link("equip_view:%d" % i, def, label))
 		"other":
 			var any := false
 			for id: String in player.bag:
 				var def := GameData.get_item(id)
-				if String(def.get("type", "")) == "goods":
+				var t := String(def.get("type", ""))
+				if t == "goods":
 					any = true
 					lines.append("%s ×%d" % [esc(String(def.get("name", id))), int(player.bag[id])])
-			if not any:
+				elif t == "item":
+					any = true
+					var action := ""
+					var eff: Dictionary = def.get("effect", {})
+					if String(eff.get("kind", "")) == "quest_item":
+						action = dim("[任务物品]")
+					elif not eff.is_empty():
+						action = link("use_item:%s" % id, "[使用]")
+					lines.append("%s ×%d %s  %s" % [
+						quality_name(def, id), int(player.bag[id]), _shop_effect_text(def), action])
+			if any:
+				lines.append(dim("（长串货去市场卖，功能道具点「使用」。）"))
+			else:
 				lines.append(dim("暂无杂物。可以去市场买些本地特产。"))
 		"gem":
-			lines.append(dim("暂无宝石。"))
+			var any_gem := false
+			for id: String in player.bag:
+				var def := GameData.get_item(id)
+				if String(def.get("type", "")) != "gem" or int(player.bag[id]) <= 0:
+					continue
+				any_gem = true
+				var bonus: Dictionary = def.get("bonus", {})
+				var bparts: Array[String] = []
+				for k: String in bonus:
+					bparts.append("%s+%d" % [String(GEM_BONUS_LABELS.get(k, k)), int(bonus[k])])
+				lines.append("%s ×%d（%s）" % [quality_name(def, id), int(player.bag[id]), SEP.join(bparts)])
+			if any_gem:
+				lines.append(dim("（去铁匠铺把宝石嵌进带插槽的装备。）"))
+				lines.append("[center]%s[/center]" % link("smith_gem", "前往镶嵌"))
+			else:
+				lines.append(dim("暂无宝石。矿洞的怪物身上偶尔能摸到，博士的助手也能炼出来。"))
 		"drug":
 			var any_drug := false
 			for id: String in player.bag:
@@ -278,27 +395,77 @@ static func items_page(player: PlayerCore, cat: String) -> String:
 	return join_lines(lines)
 
 
+## 装备实例标记（手持/护甲/强化/绑定），物品列表与铁匠页共用
+static func _equip_tag(idx: int, player: PlayerCore) -> String:
+	if idx < 0 or idx >= player.equips.size():
+		return ""
+	var inst: Dictionary = player.equips[idx]
+	var tags: Array[String] = []
+	if idx == player.hand:
+		tags.append("手持")
+	var slot := String(GameData.get_item(String(inst.get("id", ""))).get("slot", "weapon"))
+	if idx == player.armor_idx:
+		tags.append("已穿戴")
+	elif slot == "armor":
+		tags.append("护甲")
+	if int(inst.get("enhance", 0)) > 0:
+		tags.append("+%d" % int(inst.get("enhance", 0)))
+	if bool(inst.get("bound", false)):
+		tags.append("绑定")
+	if tags.is_empty():
+		return ""
+	return "（%s）" % " ".join(PackedStringArray(tags))
+
+
 static func equip_detail(player: PlayerCore, idx: int) -> String:
 	if idx < 0 or idx >= player.equips.size():
 		return items_page(player, "equip")
 	var inst := player.equips[idx]
 	var id := String(inst.get("id", ""))
 	var def := GameData.get_item(id)
-	var atk: Array = def.get("atk", [0, 0])
+	var is_armor := String(def.get("slot", "weapon")) == "armor"
 	var max_dur := maxi(int(def.get("durability", 1)), 1)
 	var lines: Array[String] = []
 	lines.append(header("装备详情"))
-	lines.append("名称：%s" % esc(player.item_name(id)))
+	lines.append("名称：%s" % quality_name(def, id))
 	lines.append("说明：%s" % esc(String(def.get("desc", ""))))
-	lines.append("使用等级：%d级" % int(def.get("req_level", 1)))
-	lines.append("品质：%s  %s" % [esc(String(def.get("quality", "普通"))), "可交易" if bool(def.get("tradeable", false)) else "不可交易"])
-	lines.append("负重：%d" % int(def.get("weight", 0)))
-	lines.append("数量：1")
-	lines.append("最小攻击：%d" % int(atk[0]))
-	lines.append("最大攻击：%d" % int(atk[1]))
+	lines.append("类型：%s  使用等级：%d级" % ["护甲" if is_armor else "武器", int(def.get("req_level", 1))])
+	var trade_text := "可交易" if bool(def.get("tradeable", false)) else "不可交易"
+	if bool(inst.get("bound", false)):
+		trade_text += "（已绑定）"
+	lines.append("品质：%s  %s" % [esc(quality_label(def)), trade_text])
+	lines.append("负重：%d  强化：+%d" % [int(def.get("weight", 0)), maxi(int(inst.get("enhance", 0)), 0)])
+	if is_armor:
+		lines.append("防御：%d" % maxi(int(def.get("def", 0)), 0))
+	else:
+		var atk: Array = def.get("atk", [0, 0])
+		lines.append("攻击：%d-%d" % [int(atk[0]), int(atk[1])])
+	var affix: Array[String] = []
+	if int(def.get("agility", 0)) > 0:
+		affix.append("敏捷+%d" % int(def.get("agility", 0)))
+	if int(def.get("lucky", 0)) > 0:
+		affix.append("幸运+%d" % int(def.get("lucky", 0)))
+	if int(def.get("poison_res", 0)) > 0:
+		affix.append("毒抗+%d" % int(def.get("poison_res", 0)))
+	if not affix.is_empty():
+		lines.append("词条：%s" % SEP.join(affix))
+	var slots := maxi(int(def.get("slots", 0)), 0)
+	if slots > 0:
+		var gems: Array = inst.get("gems", [])
+		var gem_parts: Array[String] = []
+		for g in gems:
+			var gid := String(g)
+			gem_parts.append(quality_name(GameData.get_item(gid), gid))
+		var gem_text := SEP.join(gem_parts) if not gem_parts.is_empty() else "空"
+		lines.append("宝石：%s（插槽 %d/%d）" % [gem_text, gems.size(), slots])
 	lines.append("耐久：%d-%d" % [int(inst.get("dur", 0)), max_dur])
 	lines.append("")
-	if idx == player.hand:
+	if is_armor:
+		if idx == player.armor_idx:
+			lines.append("[center]%s   %s[/center]" % [link("armor_off:%d" % idx, "脱下护甲"), link("back_game", "返回")])
+		else:
+			lines.append("[center]%s   %s[/center]" % [link("equip_armor:%d" % idx, "穿戴护甲"), link("back_game", "返回")])
+	elif idx == player.hand:
 		lines.append("[center]%s[/center]" % link("equip_off:%d" % idx, "卸下手持"))
 	else:
 		lines.append("[center]%s   %s[/center]" % [link("equip_use:%d" % idx, "使用手持"), link("back_game", "返回")])
@@ -321,6 +488,8 @@ static func city_map() -> String:
 	if not row.is_empty():
 		lines.append(SEP.join(PackedStringArray(row)))
 	lines.append("")
+	lines.append("[center]%s[/center]" % link("worldmap", "大世界"))
+	lines.append("")
 	lines.append(footer())
 	return join_lines(lines)
 
@@ -338,15 +507,22 @@ static func combat_page(engine: CombatEngine, player: PlayerCore, show_self: boo
 	lines.append("防御：%d" % engine.monster_def)
 	lines.append("体力：%d/%d" % [engine.monster_hp, engine.monster_hp_max])
 	lines.append("")
-	lines.append("[center]%s   %s   %s   %s[/center]" % [
+	var actions: Array[String] = [
 		link("attack", "攻击"),
 		link("view", "查看"),
 		link("combat_drug", "药品"),
 		link("retreat", "撤退(%d铜贝)" % engine.retreat_cost()),
-	])
-	lines.append("你体力：%d/%d  攻击：%d-%d  防御：%d" % [
+	]
+	# 攻击术（契约 plan-v2 §5：已学 attack 且本场未用时显示）
+	if player.has_skill("attack") and not engine.skill_used_this_fight:
+		actions.append(link("skill_cast", "攻击术(%d体力)" % Rules.combat_skill_stamina()))
+	lines.append("[center]%s[/center]" % SEP.join(actions))
+	var momentum_text := ""
+	if player.momentum > 0:
+		momentum_text = "  士气：攻击+%d%%" % (player.momentum * Rules.combat_momentum_atk_pct_per())
+	lines.append("你体力：%d/%d  攻击：%d-%d  防御：%d%s" % [
 		player.hp_cur, player.max_hp(),
-		player.atk_range().x, player.atk_range().y, player.defense(),
+		player.atk_range().x, player.atk_range().y, player.defense(), momentum_text,
 	])
 	if show_self:
 		var hand := player.hand_item()
@@ -367,6 +543,10 @@ static func win_page(engine: CombatEngine, player: PlayerCore) -> String:
 	lines.append("战胜了%s！" % esc(engine.monster_name))
 	if engine.monster_id == Rules.dungeon_monster() and player.location == Rules.dungeon_scene():
 		lines.append("地宫击杀进度：%d/%d" % [player.dungeon_kills, Rules.dungeon_kill_goal()])
+	var qa: Dictionary = player.quest_andrew
+	if String(qa.get("state", "")) == "active" and int(qa.get("day", -1)) == player.current_day() \
+			and player.location != Rules.dungeon_scene():
+		lines.append("试炼进度：%d/%d" % [int(qa.get("kills", 0)), Rules.quest_andrew_kills()])
 	lines.append("")
 	lines.append("[center]%s   %s[/center]" % [link("back_game", "返回游戏"), link("combat_reward", "继续")])
 	return join_lines(lines)
@@ -458,11 +638,21 @@ static func retreat_page(cost: int) -> String:
 
 # ---------- NPC / 子系统 ----------
 
+## NPC 对白行渲染（flavor 与新 kind 页面共用，避免五处复制）：
+## {昵称} 占位符替换；行首孤立逗号视为缺省的称呼位，自动补昵称
+## （酒馆老板✅原文以「，欢迎来到这个世界！」起句，原版渲染时逗号前是玩家昵称）
+static func npc_line(line: String, player: PlayerCore) -> String:
+	var text := line.replace("{昵称}", player.nickname)
+	if text.begins_with("，") or text.begins_with(","):
+		text = player.nickname + text
+	return text
+
+
 static func npc_flavor_page(npc: Dictionary, player: PlayerCore) -> String:
 	var lines: Array[String] = []
 	lines.append(header(String(npc.get("name", ""))))
 	for line: String in npc.get("lines", []):
-		lines.append(esc(line.replace("{昵称}", player.nickname)))
+		lines.append(esc(npc_line(line, player)))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "返回"))
 	return join_lines(lines)
@@ -485,6 +675,11 @@ static func welfare_page(player: PlayerCore) -> String:
 		lines.append("[center]%s[/center]" % link("welfare_claim", "领福利"))
 	else:
 		lines.append("福利官：本周的福利你已经领过了，下周再来吧。")
+	if not player.gift_claimed:
+		# 契约 plan-v2 §5.7：全服预约礼包一次性领取
+		lines.append("")
+		lines.append("福利官：对了，全服预约的礼包还没人来领，一人一份，先到先得。")
+		lines.append("[center]%s[/center]" % link("gift_claim", "领取预约礼包"))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("gm_password", "纵横四海"))
 	lines.append("")
@@ -784,20 +979,73 @@ static func sell_page(player: PlayerCore) -> String:
 
 # ---------- 商店 / 铁匠（扩展契约 §4.3-§4.4） ----------
 
+## 商店在售过滤（契约 plan-v2 §2.1）：price>0 的药品与功能道具；
+## 任务物品/礼包/price=0 特殊道具（体力宝/技能书/龙泉水等）不进商店；宝石走炼金与掉落
+static func _shop_entry_ids() -> Array[String]:
+	var out: Array[String] = []
+	for id: String in GameData.items:
+		var def := GameData.get_item(id)
+		var t := String(def.get("type", ""))
+		if int(def.get("price", 0)) <= 0:
+			continue
+		if t == "drug":
+			out.append(id)
+		elif t == "item":
+			var eff: Dictionary = def.get("effect", {})
+			var kind := String(eff.get("kind", ""))
+			if kind != "quest_item" and kind != "gift":
+				out.append(id)
+	return out
+
+
+## 商店行效果文案（药品=疗效/经验场数；功能道具按 effect kind）
+static func _shop_effect_text(def: Dictionary) -> String:
+	if String(def.get("type", "")) == "drug":
+		if def.has("exp_buff"):
+			var buff: Dictionary = def.get("exp_buff", {})
+			return "经验×%d（%d场）" % [int(buff.get("multiplier", 10)), int(buff.get("battles", 10))]
+		return "疗效+%d" % int(def.get("heal", 0))
+	var eff: Dictionary = def.get("effect", {})
+	match String(eff.get("kind", "")):
+		"stamina":
+			return "生活体力+%d" % int(eff.get("value", 0))
+		"exp_buff":
+			return "经验+%d%%（%d小时）" % [
+				int(round((float(eff.get("multiplier", 2.0)) - 1.0) * 100.0)), maxi(int(eff.get("hours", 1)), 1)]
+		"clear_buff":
+			return "清除卡片效果"
+		"weight":
+			return "负重上限+%d" % int(eff.get("value", 0))
+		"rename":
+			return "更改昵称"
+		"teleport_wild":
+			return "传送到野外"
+		"skill":
+			return "学习技能"
+		"meditate_tool":
+			return "打坐修行用具"
+		"bait":
+			return "稀有鱼饵"
+		"seed":
+			return "农场种子"
+		_:
+			return ""
+
+
 static func shop_page(player: PlayerCore) -> String:
 	var lines: Array[String] = []
 	lines.append(header("威尼斯商店"))
-	lines.append("商人：远洋商队刚靠岸，这几样药剂最能救命。出门打怪，包里可不能缺了它们。")
-	for id: String in GameData.items:
+	lines.append("商人：远洋商队刚靠岸，药剂、干粮、杂货这几样最救命。出门在外，包里可不能缺了它们。")
+	for id: String in _shop_entry_ids():
 		var def := GameData.get_item(id)
-		# 商店只卖体力药；经验加速丹等特殊丹药不在售（heal 缺失即跳过）
-		if String(def.get("type", "")) != "drug" or int(def.get("heal", 0)) <= 0:
-			continue
-		var unit := int(def.get("price", int(def.get("buy_price", 0))))
-		lines.append("▉%s 疗效+%d %d铜贝/瓶" % [esc(String(def.get("name", id))), int(def.get("heal", 0)), unit])
+		var unit := int(def.get("price", 0))
+		lines.append("▉%s %s %d铜贝" % [esc(String(def.get("name", id))), _shop_effect_text(def), unit])
+		var tiers: Array = def.get("tiers", [])
+		if tiers.is_empty():
+			tiers = [1, 10]
 		var parts: Array[String] = []
-		for tier: int in def.get("tiers", []):
-			parts.append(link("buy_drug:%s:%d" % [id, tier], "买%d瓶" % tier))
+		for tier in tiers:
+			parts.append(link("buy_drug:%s:%d" % [id, int(tier)], "买%d" % int(tier)))
 		lines.append("　买：%s" % SEP.join(PackedStringArray(parts)))
 	lines.append("我现有：金贝:%d 铜贝:%d" % [player.gold, player.copper])
 	lines.append("")
@@ -827,9 +1075,28 @@ static func smith_page(player: PlayerCore) -> String:
 		var max_dur := maxi(int(GameData.get_item(hid).get("durability", 1)), 1)
 		lines.append("手持：%s 耐久 %d/%d" % [esc(player.item_name(hid)), int(hand.get("dur", 0)), max_dur])
 	lines.append("")
-	lines.append("[center]%s   %s[/center]" % [link("repair_hand", "修理手持"), link("forge_page", "打造装备")])
-	# 契约 trade-spec §7：多余装备回炉回收入口
-	lines.append("[center]%s[/center]" % link("sell_equip_page", "出售装备"))
+	lines.append("[center]%s   %s   %s[/center]" % [
+		link("repair_hand", "修理手持"), link("forge_page", "打造装备"), link("smith_enhance", "强化装备")])
+	lines.append("[center]%s   %s[/center]" % [link("smith_gem", "宝石镶嵌"), link("sell_equip_page", "出售装备")])
+	# 契约 plan-v2 §2.1：price>0 的装备在铁匠处在售
+	var on_sale := 0
+	for id: String in GameData.items:
+		var def := GameData.get_item(id)
+		if String(def.get("type", "")) != "equip" or int(def.get("price", 0)) <= 0:
+			continue
+		on_sale += 1
+		if on_sale == 1:
+			lines.append("")
+			lines.append(header("在售装备"))
+		var stat_text := ""
+		if String(def.get("slot", "weapon")) == "armor":
+			stat_text = "防御%d" % maxi(int(def.get("def", 0)), 0)
+		else:
+			var atk: Array = def.get("atk", [0, 0])
+			stat_text = "攻击%d-%d" % [int(atk[0]), int(atk[1])]
+		lines.append("▉%s（%d级 %s）%d铜贝  %s" % [
+			esc(String(def.get("name", id))), int(def.get("req_level", 1)), stat_text,
+			int(def.get("price", 0)), link("buy_equip:%s" % id, "[购买]")])
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "返回"))
 	return join_lines(lines)
@@ -1024,16 +1291,21 @@ static func sell_equip_page(player: PlayerCore, notice: String = "") -> String:
 		var def := GameData.get_item(id)
 		var max_dur := maxi(int(def.get("durability", 1)), 1)
 		var sell := Rules.equip_sell_price(int(def.get("price", 0)))
-		var marker := "（手持）" if i == player.hand else ""
+		var bound := bool(inst.get("bound", false))
 		var same := 0
 		for other: Dictionary in player.equips:
-			if String(other.get("id", "")) == id:
+			# 批量入口只数可卖件（绑定装备无法出售，主进程裁决）
+			if String(other.get("id", "")) == id and not bool(other.get("bound", false)):
 				same += 1
-		var actions: Array[String] = [link("sell_equip:%d" % i, "[出售]")]
-		if same >= 2:
-			actions.append(link("sell_equip_all:%s" % id, "[全部出售%d件]" % same))
+		var actions: Array[String] = []
+		if bound:
+			actions.append(dim("［绑定装备无法出售］"))
+		else:
+			actions.append(link("sell_equip:%d" % i, "[出售]"))
+			if same >= 2:
+				actions.append(link("sell_equip_all:%s" % id, "[全部出售%d件]" % same))
 		lines.append("▉%s%s 耐久%d/%d 回收%d铜贝  %s" % [
-			esc(player.item_name(id)), marker, int(inst.get("dur", 0)), max_dur, sell,
+			esc(player.item_name(id)), _equip_tag(i, player), int(inst.get("dur", 0)), max_dur, sell,
 			SEP.join(PackedStringArray(actions)),
 		])
 	lines.append("铜贝：%d" % player.copper)
@@ -1113,6 +1385,508 @@ static func dungeon_timeout_page() -> String:
 	lines.append("秘密看守：限时已到，地宫的规矩谁也不能破例。今天就到此为止，明天再来吧。")
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("goto:%s" % Rules.dungeon_exit_scene(), "离开地宫"))
+	return join_lines(lines)
+
+
+# ---------- 生活玩法（契约 plan-v2 §3/§5） ----------
+
+## 通用道具使用结果页（use_item 各分支共用）
+static func item_used_page(player: PlayerCore, msg: String) -> String:
+	var lines: Array[String] = []
+	lines.append(header("物品"))
+	lines.append(esc(msg))
+	lines.append("生活体力：%d/%d  负重：%d/%d" % [
+		player.stamina, player.max_stamina(), player.weight(), player.weight_max()])
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("items:other", "返回物品"), link("back_game", "返回游戏")])
+	return join_lines(lines)
+
+
+static func meditate_result(player: PlayerCore, res: Dictionary) -> String:
+	var lines: Array[String] = []
+	lines.append(header("打坐"))
+	lines.append(esc(String(res.get("msg", ""))))
+	if bool(res.get("ok", false)):
+		lines.append("修为精进：经验 +%d" % int(res.get("exp", 0)))
+	lines.append("生活体力：%d/%d" % [player.stamina, player.max_stamina()])
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("meditate", "再打坐"), link("back_game", "返回游戏")])
+	return join_lines(lines)
+
+
+static func fish_result(player: PlayerCore, res: Dictionary, use_bait: bool) -> String:
+	var lines: Array[String] = []
+	lines.append(header("钓鱼"))
+	lines.append(esc(String(res.get("msg", ""))))
+	lines.append("生活体力：%d/%d  活饵：×%d" % [
+		player.stamina, player.max_stamina(), player.count_stack(Life.BAIT_ID)])
+	lines.append("")
+	lines.append("[center]%s   %s   %s[/center]" % [
+		link("fish", "再钓一次"), link("fish:bait", "用活饵再钓") if use_bait else link("fish:bait", "换活饵钓"),
+		link("back_game", "返回游戏")])
+	return join_lines(lines)
+
+
+static func dive_result(player: PlayerCore, res: Dictionary) -> String:
+	var lines: Array[String] = []
+	lines.append(header("潜水"))
+	lines.append(esc(String(res.get("msg", ""))))
+	lines.append("生活体力：%d/%d  海皇碎片：×%d" % [
+		player.stamina, player.max_stamina(), player.count_stack(SIREN_SHARD_ID)])
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("dive", "再潜一次"), link("back_game", "返回游戏")])
+	return join_lines(lines)
+
+
+static func farm_page(player: PlayerCore, notice: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header("农场"))
+	lines.append("四块田翻得整整齐齐，播下种子就等着收获。")
+	var seed_count := 0
+	for id: String in player.bag:
+		var eff: Dictionary = GameData.get_item(id).get("effect", {})
+		if String(eff.get("kind", "")) == "seed":
+			seed_count += int(player.bag[id])
+	lines.append("种子：×%d  生活体力：%d/%d（播种一次耗 %d）" % [
+		seed_count, player.stamina, player.max_stamina(), Rules.life_farm_stamina()])
+	if notice != "":
+		lines.append(esc(notice))
+	var now := int(Time.get_unix_time_from_system())
+	var mature := 0
+	for i in player.farm_plots.size():
+		var plot: Dictionary = player.farm_plots[i]
+		var name_text := "空地"
+		var status := ""
+		if plot.is_empty():
+			if seed_count > 0 and player.stamina >= Rules.life_farm_stamina():
+				status = link("farm_plant:%d" % i, "[播种]")
+			else:
+				status = dim("（缺种子或体力不足）")
+		else:
+			name_text = player.item_name(String(plot.get("seed_id", "")))
+			var left := maxi(Rules.life_farm_grow_sec() - (now - maxi(int(plot.get("planted_unix", 0)), 0)), 0)
+			if left <= 0:
+				mature += 1
+				status = "[color=#6fd66f]已成熟[/color]"
+			else:
+				status = dim("生长中（剩 %s）" % _mmss(left))
+		lines.append("▉第%d块田：%s %s" % [i + 1, esc(name_text), status])
+	if mature > 0:
+		lines.append("[center]%s[/center]" % link("farm_harvest", "收获成熟作物(%d块)" % mature))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回农场"))
+	return join_lines(lines)
+
+
+## 引路蜂可去的野外场景（契约 §5.9）：on_map=false 全部野外，不含地宫与港口
+static func wild_scenes() -> Array[String]:
+	var out: Array[String] = []
+	var port_scenes := {}
+	for p: Dictionary in GameData.world_ports:
+		port_scenes[String(p.get("scene", p.get("id", "")))] = true
+	for id: String in GameData.scene_order:
+		var scene: Dictionary = GameData.scenes_by_id[id]
+		if bool(scene.get("on_map", false)):
+			continue
+		if id == Rules.dungeon_scene() or port_scenes.has(id):
+			continue
+		if (scene.get("exits", []) as Array).is_empty():
+			continue
+		out.append(id)
+	return out
+
+
+static func wild_tp_page(player: PlayerCore, notice: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header("引路蜂"))
+	lines.append("引路蜂振翅引路——选一处野外，它便带你瞬移过去（消耗一只引路蜂）。")
+	lines.append("持有引路蜂：×%d" % player.count_stack(TP_BEE_ID))
+	if notice != "":
+		lines.append(esc(notice))
+	for sid: String in wild_scenes():
+		var scene := GameData.get_scene(sid)
+		var label := String(scene.get("name", sid))
+		if sid == player.location:
+			lines.append("▉%s（当前所在）" % esc(label))
+		else:
+			lines.append("▉%s" % link("wild_tp:%s" % sid, label))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+## 大世界地图（契约 §5.11 最终裁决：纯展示只读，不放传送按钮，避免变相免费传送）
+static func worldmap_page(player: PlayerCore) -> String:
+	var groups: Array = [
+		["矿山深处", ["kuaangsan", "kuongdung"]],
+		["废墟与堡垒", ["hongjoe", "feizoi", "biltou"]],
+		["荒野湿地", ["coujin", "moucoeng", "zamlam", "mezai", "zozik", "gucyunlei", "hauwaan"]],
+		["农场海岸", ["nungcoeng", "nungcoeng1", "haitan", "tsienhoi", "ngoanzo"]],
+		["学院重地", ["soenmon"]],
+	]
+	var lines: Array[String] = []
+	lines.append(header("大世界"))
+	lines.append(dim("威尼斯城外的广袤天地。此处仅作指路之用：步行沿出口前进，跨海请去码头乘船。"))
+	for g: Array in groups:
+		var row: Array[String] = []
+		for sid: String in g[1]:
+			if not GameData.has_scene(sid):
+				continue
+			var label := String(GameData.get_scene(sid).get("name", sid))
+			if sid == player.location:
+				label += "（当前所在）"
+			row.append(esc(label))
+		if row.is_empty():
+			continue
+		lines.append("")
+		lines.append("[b]%s[/b]" % esc(String(g[0])))
+		lines.append(SEP.join(row))
+		var first_scene := GameData.get_scene(String(g[1][0]))
+		var flavor := String(first_scene.get("desc", "")).split("。")[0]
+		if flavor != "":
+			lines.append(dim(flavor + "。"))
+	lines.append("")
+	lines.append("地宫须由北城门的探险官带领进入；城区街坊见「城内地图」。")
+	lines.append("[center]%s[/center]" % link("map", "城内地图"))
+	lines.append("")
+	lines.append(footer())
+	return join_lines(lines)
+
+
+# ---------- 新 NPC 页面（契约 plan-v2 §3 新 kind） ----------
+
+## 酒馆主页（老板 kind=tavern）：新手指引对白 + 同场人物入口
+static func tavern_page(scene: Dictionary, player: PlayerCore) -> String:
+	var lines: Array[String] = []
+	var boss := {}
+	for npc: Dictionary in scene.get("npcs", []):
+		if String(npc.get("kind", "")) == "tavern":
+			boss = npc
+			break
+	lines.append(header(String(boss.get("name", "老板"))))
+	for line: String in boss.get("lines", []):
+		lines.append(esc(npc_line(line, player)))
+	var others: Array[String] = []
+	for npc: Dictionary in scene.get("npcs", []):
+		if String(npc.get("kind", "")) == "tavern":
+			continue
+		others.append(link("npc:%s:%s" % [String(scene.get("id", "")), String(npc.get("id", ""))], String(npc.get("name", ""))))
+	if not others.is_empty():
+		lines.append("")
+		lines.append(header("店里还有"))
+		lines.append(SEP.join(others))
+	lines.append(dim("朗姆酒气与烤鱼香里，各国水手把远方的传闻搅在一起。"))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+## 德罗西（kind=circus）：马戏团八卦 + 动物皮收购（鹅毛/狼皮=卖价120%，契约 §5.10）
+const CIRCUS_SKINS := ["emao", "langpi"]
+const CIRCUS_PRICE_PCT := 120
+
+
+static func circus_unit_price(id: String) -> int:
+	var sell := int(GameData.get_item(id).get("sell_price", 0))
+	return maxi(int(round(float(sell) * float(CIRCUS_PRICE_PCT) / 100.0)), 1)
+
+
+static func circus_page(player: PlayerCore, npc: Dictionary, notice: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header(String(npc.get("name", "德罗西"))))
+	for line: String in npc.get("lines", []):
+		lines.append(esc(npc_line(line, player)))
+	lines.append(dim("（马戏团的帐篷常驻酒馆后院，动物们的吃喝拉撒都归德罗西管。兽皮给动物们做垫子，他常年高价收。）"))
+	if notice != "":
+		lines.append("[color=#6fd66f]%s[/color]" % esc(notice))
+	lines.append(header("动物皮收购"))
+	for id: String in CIRCUS_SKINS:
+		var def := GameData.get_item(id)
+		if def.is_empty():
+			continue
+		var have := player.count_stack(id)
+		var unit := circus_unit_price(id)
+		lines.append("▉%s 收%d铜贝/张（持有×%d，市场卖价%d）" % [
+			esc(String(def.get("name", id))), unit, have, int(def.get("sell_price", 0))])
+		if have > 0:
+			lines.append("　%s   %s" % [
+				link("circus_sell:%s:1" % id, "卖1张"),
+				link("circus_sell:%s:all" % id, "全部卖出(%d铜贝)" % (unit * have))])
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+## 博士的助手（kind=alchemist）：炼金兑换（config.smith.alchemy）
+static func alchemy_page(player: PlayerCore, notice: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header("博士的助手"))
+	lines.append("助手：老师的兑换生意由我照看——材料备齐、铜贝给够，东西马上炼给你。")
+	if notice != "":
+		lines.append(esc(notice))
+	var recipes := Rules.smith_alchemy()
+	for i in recipes.size():
+		var recipe: Dictionary = recipes[i]
+		var give: Dictionary = recipe.get("give", {})
+		var get_d: Dictionary = recipe.get("get", {})
+		var mat_parts: Array[String] = []
+		var ready := true
+		for mid: String in give:
+			var need := int(give[mid])
+			if mid == "copper":
+				continue
+			mat_parts.append("%s×%d（有%d）" % [esc(player.item_name(mid)), need, player.count_stack(mid)])
+			if player.count_stack(mid) < need:
+				ready = false
+		var copper := int(give.get("copper", 0))
+		if copper > 0:
+			mat_parts.append("%d铜贝" % copper)
+		var gid := String(get_d.get("id", ""))
+		var gn := maxi(int(get_d.get("n", 1)), 1)
+		lines.append("▉%s×%d ← %s" % [esc(player.item_name(gid)), gn, SEP.join(mat_parts)])
+		if ready and player.copper >= copper:
+			lines.append("　%s" % link("alchemy:%d" % i, "[兑换]"))
+		else:
+			lines.append("　%s" % dim("（材料或铜贝不足）"))
+	lines.append(dim("（兑换来的龙泉水是强化装备的必需品，宝石则能嵌进带插槽的装备。）"))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+## 安德鲁（kind=trainer）：试炼任务（接受/进度/领奖，每日轮换；已学攻击术=完成态）
+static func trainer_page(player: PlayerCore, npc: Dictionary, notice: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header(String(npc.get("name", "安德鲁"))))
+	for line: String in npc.get("lines", []):
+		lines.append(esc(npc_line(line, player)))
+	if notice != "":
+		lines.append(esc(notice))
+	if player.has_skill("attack"):
+		lines.append("[color=#6fd66f]你已领会攻击术的窍门，这试炼对你而言已经完成。[/color]")
+	else:
+		var qa: Dictionary = player.quest_andrew
+		var today := player.current_day()
+		var state := String(qa.get("state", ""))
+		var day := int(qa.get("day", -1))
+		var goal := Rules.quest_andrew_kills()
+		if state == "active" and day == today:
+			var kills := int(qa.get("kills", 0))
+			lines.append("今日试炼：击杀任意野外怪 %d/%d。" % [kills, goal])
+			if kills >= goal:
+				lines.append("安德鲁：干得漂亮！技能书和赏钱拿好。")
+				lines.append("[center]%s[/center]" % link("quest_andrew:claim", "领取奖励"))
+			else:
+				lines.append(dim("（击败城外的野怪即可计数，地宫的杀戮不算。）"))
+		elif state == "claimed" and day == today:
+			lines.append("安德鲁：今天的赏钱你已经领过了，明天再来接试炼吧。")
+		else:
+			lines.append("安德鲁：今日试炼——击杀 %d 只野外野怪，赏你技能书一本，外加 %d 铜贝。接不接？" % [
+				goal, Rules.quest_andrew_reward_copper()])
+			lines.append("[center]%s[/center]" % link("quest_andrew:accept", "接下试炼"))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+## 西利亚（kind=siren）：海皇碎片任务 + 潜水指引
+static func siren_page(player: PlayerCore, npc: Dictionary, notice: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header(String(npc.get("name", "西利亚"))))
+	for line: String in npc.get("lines", []):
+		lines.append(esc(npc_line(line, player)))
+	if notice != "":
+		lines.append(esc(notice))
+	var shards := player.count_stack(SIREN_SHARD_ID)
+	var need := Rules.quest_siren_shards()
+	if bool(player.quest_siren.get("claimed", false)):
+		lines.append("西利亚：海皇的谢礼你已经带走了，愿海皇保佑你的航程。")
+	elif shards >= need:
+		var reward := Rules.quest_siren_reward()
+		var reward_parts: Array[String] = []
+		for id: String in reward:
+			reward_parts.append("%s×%d" % [esc(player.item_name(id)), int(reward[id])])
+		lines.append("西利亚：%d 片海皇碎片！快给我看看……这就是海皇宫殿的信物。说好的谢礼，一样不少：%s。" % [
+			shards, "、".join(reward_parts)])
+		lines.append("[center]%s[/center]" % link("quest_siren", "交付海皇碎片"))
+	else:
+		lines.append("西利亚：传说沉没的海皇宫殿藏着无价之宝，我只求一片宫殿的碎片。带 %d 片来，谢礼绝不亏待你。（%d/%d）" % [
+			need, shards, need])
+	lines.append("")
+	lines.append(dim("（潜水地点：浅海与暗礁。水性要好，体力要足，深海偶尔还有海妖出没。）"))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+## 奥布帕斯（kind=riddle）：每日一谜（当日轮换取题），答对得铜贝，答错可再猜
+static func riddle_day_index(day: int) -> int:
+	var riddles := Rules.quest_riddles()
+	if riddles.is_empty():
+		return -1
+	return ((day % riddles.size()) + riddles.size()) % riddles.size()
+
+
+## 谜底选项：全部谜底去重（保持首次出现顺序），当日谜底必在其中
+static func riddle_options() -> Array[String]:
+	var out: Array[String] = []
+	for r: Dictionary in Rules.quest_riddles():
+		var a := String(r.get("a", ""))
+		if a != "" and not out.has(a):
+			out.append(a)
+	return out
+
+
+static func riddle_page(player: PlayerCore, npc: Dictionary, notice: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header(String(npc.get("name", "奥布帕斯"))))
+	for line: String in npc.get("lines", []):
+		lines.append(esc(npc_line(line, player)))
+	var today := player.current_day()
+	var idx := riddle_day_index(today)
+	var riddles := Rules.quest_riddles()
+	if idx < 0 or idx >= riddles.size():
+		lines.append(dim("（谜语书缺了页，改日再猜。）"))
+	else:
+		var riddle: Dictionary = riddles[idx]
+		if player.riddle_day == today:
+			lines.append("今日之谜：%s" % esc(String(riddle.get("q", ""))))
+			lines.append("奥布帕斯：哈哈，答案就是「%s」，你已猜中，赏钱已付。明日再来。" % esc(String(riddle.get("a", ""))))
+		else:
+			lines.append("奥布帕斯：猜中今日之谜，赏 %d 铜贝。答错不收钱，可以再猜。" % Rules.quest_riddle_reward_copper())
+			lines.append("今日之谜：%s" % esc(String(riddle.get("q", ""))))
+			var options := riddle_options()
+			var parts: Array[String] = []
+			for i in options.size():
+				parts.append(link("riddle:%d" % i, options[i]))
+			lines.append(SEP.join(parts))
+	if notice != "":
+		lines.append(esc(notice))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+# ---------- 改名 / 礼包 / 强化 / 宝石 ----------
+
+## 改名页（契约 §5.8）：GameScreen 据 input_mode="rename" 显示输入行
+static func rename_page(player: PlayerCore, error_msg: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header("改名卡"))
+	lines.append("在上方输入框输入新昵称（12 字以内），点击确定。")
+	if error_msg != "":
+		lines.append("[color=red]%s[/color]" % esc(error_msg))
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("rename_ok", "确定改名"), link("back_game", "取消")])
+	return join_lines(lines)
+
+
+static func rename_result(player: PlayerCore) -> String:
+	var lines: Array[String] = []
+	lines.append(header("改名卡"))
+	lines.append("改名成功！从现在起，请叫我「%s」。" % esc(player.nickname))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回游戏"))
+	return join_lines(lines)
+
+
+static func gift_result(player: PlayerCore, got: Array[String]) -> String:
+	var lines: Array[String] = []
+	lines.append(header("全服预约礼包"))
+	for g in got:
+		lines.append(esc(g))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回游戏"))
+	return join_lines(lines)
+
+
+## 铁匠强化选装页（契约 §5：smith_enhance / smith_enhance:<idx>）
+static func smith_enhance_page(player: PlayerCore, notice: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header("铁匠铺 · 强化"))
+	lines.append("铁匠：一瓶龙泉水淬火，%d 铜贝工钱，威力更上一层——强化过的装备就绑定喽，卖不得。" % Rules.smith_enhance_copper())
+	lines.append("龙泉水：×%d  铜贝：%d" % [player.count_stack("longquanshui"), player.copper])
+	if notice != "":
+		lines.append(esc(notice))
+	if player.equips.is_empty():
+		lines.append(dim("你身上一件装备都没有。"))
+	var can_pay := player.count_stack("longquanshui") > 0 and player.copper >= Rules.smith_enhance_copper()
+	for i in player.equips.size():
+		var inst := player.equips[i]
+		var id := String(inst.get("id", ""))
+		var enhance := maxi(int(inst.get("enhance", 0)), 0)
+		if enhance >= Rules.smith_enhance_max():
+			lines.append("▉%s%s 强化%d/%d  %s" % [
+				quality_name(GameData.get_item(id), id), _equip_tag(i, player),
+				enhance, Rules.smith_enhance_max(), dim("已到顶")])
+		else:
+			var action := link("smith_enhance:%d" % i, "[强化到+%d]" % (enhance + 1)) if can_pay else dim("（缺龙泉水或铜贝）")
+			lines.append("▉%s%s 强化%d/%d  %s" % [
+				quality_name(GameData.get_item(id), id), _equip_tag(i, player),
+				enhance, Rules.smith_enhance_max(), action])
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("smith", "返回铁匠铺"), link("back_game", "返回游戏")])
+	return join_lines(lines)
+
+
+## 铁匠宝石页（契约 §5：两步交互 smith_gem → smith_gem:<装备> → smith_gem:<装备>:<宝石>）
+static func smith_gem_page(player: PlayerCore, equip_idx: int, notice: String = "") -> String:
+	var lines: Array[String] = []
+	lines.append(header("铁匠铺 · 宝石镶嵌"))
+	if notice != "":
+		lines.append(esc(notice))
+	if player.equips.is_empty():
+		lines.append(dim("你身上一件装备都没有。"))
+	elif equip_idx < 0 or equip_idx >= player.equips.size():
+		# 第一步：选装备
+		lines.append("铁匠：先把要镶宝石的装备挑出来（只有带插槽的装备吃得进宝石）。")
+		for i in player.equips.size():
+			var inst_sel: Dictionary = player.equips[i]
+			var id_sel := String(inst_sel.get("id", ""))
+			var def_sel := GameData.get_item(id_sel)
+			var slots_sel := maxi(int(def_sel.get("slots", 0)), 0)
+			var gems_sel: Array = inst_sel.get("gems", [])
+			var slots_text := dim("无插槽")
+			if slots_sel > 0:
+				var full_mark := "" if gems_sel.size() < slots_sel else "（已满）"
+				slots_text = "插槽%d/%d%s" % [gems_sel.size(), slots_sel, full_mark]
+			lines.append("▉%s %s  %s" % [quality_name(def_sel, id_sel), _equip_tag(i, player), slots_text])
+			if slots_sel > 0 and gems_sel.size() < slots_sel:
+				lines.append("　%s" % link("smith_gem:%d" % i, "[选这件]"))
+	else:
+		# 第二步：选宝石
+		var inst: Dictionary = player.equips[equip_idx]
+		var id := String(inst.get("id", ""))
+		var def := GameData.get_item(id)
+		var slots := maxi(int(def.get("slots", 0)), 0)
+		var gems: Array = inst.get("gems", [])
+		lines.append("目标：%s %s（插槽 %d/%d）" % [
+			quality_name(def, id), _equip_tag(equip_idx, player), gems.size(), slots])
+		for g in gems:
+			var gid := String(g)
+			lines.append("　已镶：%s" % quality_name(GameData.get_item(gid), gid))
+		var any_gem := false
+		for gid: String in player.bag:
+			var gdef := GameData.get_item(gid)
+			if String(gdef.get("type", "")) != "gem" or int(player.bag[gid]) <= 0:
+				continue
+			any_gem = true
+			var bonus: Dictionary = gdef.get("bonus", {})
+			var bparts: Array[String] = []
+			for k: String in bonus:
+				bparts.append("%s+%d" % [String(GEM_BONUS_LABELS.get(k, k)), int(bonus[k])])
+			if gems.size() < slots:
+				lines.append("▉%s ×%d（%s）  %s" % [
+					quality_name(gdef, gid), int(player.bag[gid]), SEP.join(bparts),
+					link("smith_gem:%d:%s" % [equip_idx, gid], "[镶嵌]")])
+			else:
+				lines.append("▉%s ×%d（%s）  %s" % [
+					quality_name(gdef, gid), int(player.bag[gid]), SEP.join(bparts), dim("插槽已满")])
+		if not any_gem:
+			lines.append(dim("包里没有宝石。矿洞的怪掉宝石，博士的助手也能炼出来。"))
+		lines.append("[center]%s[/center]" % link("smith_gem", "重选装备"))
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("smith", "返回铁匠铺"), link("back_game", "返回游戏")])
 	return join_lines(lines)
 
 

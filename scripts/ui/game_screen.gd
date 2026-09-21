@@ -14,6 +14,9 @@ var _name_label: Label
 var _hp_bar: ProgressBar
 var _hp_text: Label
 var _copper_label: Label
+## 输入行（input_mode="rename" 等输入类事件）：置于页面区上方，软键盘不遮挡
+var _input_row: HBoxContainer
+var _name_edit: LineEdit
 var _toast: Label
 var _toast_tween: Tween
 var _safe_frame: SafeAreaFrame
@@ -114,6 +117,28 @@ func _build_ui() -> void:
 	_auto_btn.pressed.connect(_on_auto_toggle)
 	nav.add_child(_auto_btn)
 
+	# 输入行（改名等输入类事件）：参照 TitleScreen 方案置于页面区上方，
+	# 不依赖窗口高度，也不会被移动端软键盘遮住
+	_input_row = HBoxContainer.new()
+	_input_row.add_theme_constant_override("separation", 12)
+	_input_row.visible = false
+	vbox.add_child(_input_row)
+	var name_hint := Label.new()
+	name_hint.text = "新名字:"
+	_input_row.add_child(name_hint)
+	_name_edit = LineEdit.new()
+	_name_edit.placeholder_text = "请输入新昵称"
+	_name_edit.max_length = 12
+	_name_edit.custom_minimum_size = Vector2(0, 56)
+	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_name_edit.add_theme_color_override("font_placeholder_color", Color(0.72, 0.72, 0.72))
+	_input_row.add_child(_name_edit)
+	var confirm_btn := Button.new()
+	confirm_btn.text = "确定"
+	confirm_btn.custom_minimum_size = Vector2(0, 56)
+	confirm_btn.pressed.connect(_on_rename_confirm)
+	_input_row.add_child(confirm_btn)
+
 	# 页面区（禁用横向滚动：富文本按容器宽度换行）
 	_scroll = ScrollContainer.new()
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -159,7 +184,17 @@ func _build_ui() -> void:
 func _on_link(event: String) -> void:
 	if _too_fast():
 		return
-	_router.handle(event)
+	if event == "rename_ok":
+		_router.handle("rename", _name_edit.text)
+	else:
+		_router.handle(event)
+	_after_event()
+
+
+func _on_rename_confirm() -> void:
+	if _too_fast():
+		return
+	_router.handle("rename", _name_edit.text)
 	_after_event()
 
 
@@ -266,6 +301,9 @@ func _save() -> void:
 
 func _render() -> void:
 	_view.show_page(_router.page)
+	_input_row.visible = _router.input_mode != ""
+	if _input_row.visible:
+		_name_edit.grab_focus()
 	_scroll_top()
 
 

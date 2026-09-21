@@ -40,12 +40,17 @@ func _run_all() -> void:
 	_test_trade_engine()
 	_test_trade_router(player)
 	_test_sell_equip(player)
+	_test_life_system(player)
+	_test_item_effects(player)
+	_test_equipment_affixes(player)
+	_test_quests(player)
 	await _test_auto_battle(player)
 	_test_drop_equip(player)
 	_test_title_click_path(player)
 	_test_scroll_fix(player)
 	_test_safe_area_frame()
 	_test_player_roundtrip(player)
+	_test_new_fields_roundtrip(player)
 	_test_save_manager()
 	if fails.is_empty():
 		print("SELF_TEST PASS")
@@ -83,7 +88,8 @@ func _test_data() -> void:
 	check(GameData.scenes_by_id.size() >= 25, "场景数应 ≥25（原版 25 + 城外扩展），实际 %d" % GameData.scenes_by_id.size())
 	check(GameData.ports.size() == 10, "传送港口应为 10 个")
 
-	var npc_kinds := ["flavor", "welfare", "church", "bank", "casino", "market", "teleport", "sail", "dungeon", "shop", "smith", "dungeon_keeper", "trade_market", "tavern_rumor"]
+	var npc_kinds := ["flavor", "welfare", "church", "bank", "casino", "market", "teleport", "sail", "dungeon", "shop", "smith", "dungeon_keeper", "trade_market", "tavern_rumor",
+		"tavern", "circus", "alchemist", "trainer", "siren", "riddle"]
 	for id in GameData.scene_order:
 		var scene: Dictionary = GameData.scenes_by_id[id]
 		check(String(scene.get("name", "")) != "", "场景 %s 缺 name" % id)
@@ -122,8 +128,15 @@ func _test_data() -> void:
 		var def: Dictionary = GameData.items[iid]
 		check(String(def.get("name", "")) != "", "物品 %s 缺 name" % iid)
 		if String(def.get("type", "")) == "equip":
-			var atk: Array = def.get("atk", [])
-			check(atk.size() == 2 and int(atk[1]) >= int(atk[0]), "装备 %s 攻击区间非法" % iid)
+			# 契约 plan-v2 §2.1：armor 槽位用 def 字段（无 atk），武器仍校验攻击区间
+			if String(def.get("slot", "weapon")) == "armor":
+				check(def.has("def"), "护甲 %s 缺 def" % iid)
+			else:
+				var atk: Array = def.get("atk", [])
+				check(atk.size() == 2 and int(atk[1]) >= int(atk[0]), "装备 %s 攻击区间非法" % iid)
+		if String(def.get("type", "")) == "gem":
+			var gem_bonus: Dictionary = def.get("bonus", {})
+			check(not gem_bonus.is_empty(), "宝石 %s 缺 bonus 词条" % iid)
 		if String(def.get("type", "")) == "drug":
 			check(int(def.get("heal", 0)) > 0 or def.has("exp_buff"), "药品 %s 缺 heal/exp_buff" % iid)
 			check(def.has("exp_buff") or int(def.get("price", 0)) > 0, "药品 %s 缺 price" % iid)
@@ -133,6 +146,17 @@ func _test_data() -> void:
 			check(not mats.is_empty() and int(forge.get("copper", 0)) > 0, "装备 %s forge 配置非法" % iid)
 			for mid: String in mats:
 				check(GameData.items.has(mid), "装备 %s 打造材料 %s 不存在" % [iid, mid])
+
+	# 高阶装备引用（契约 plan-v2 §2.2，D1 落地后硬校验）：
+	# 堡垒三怪 drop_equip 指向锁定 id；玄铁重剑为 L17 打造件
+	var drop_binding := {"baolei_shouwei": "xuantiejia", "hei_an_qishi": "anlinjuren", "baolei_lingzhu": "lingzhuzhiren"}
+	for mid2: String in drop_binding:
+		var m_def: Dictionary = GameData.monsters.get(mid2, {})
+		check(String((m_def.get("drop_equip", {}) as Dictionary).get("id", "")) == String(drop_binding[mid2]),
+			"怪物 %s 应掉落 %s" % [mid2, String(drop_binding[mid2])])
+	check(GameData.items.has("xuantiezhongjian")
+		and not (GameData.get_item("xuantiezhongjian").get("forge", {}) as Dictionary).is_empty(),
+		"玄铁重剑（L17 打造件）已落地且带 forge")
 
 
 # ---------- 2. 数值公式 ----------
@@ -276,7 +300,7 @@ func _test_router(player: PlayerCore) -> void:
 	# NPC 对白（逐字文案）
 	router.handle("goto:zaugun")
 	router.handle("npc:zaugun:boss")
-	check(router.page.contains("欢迎来到这个世界"), "酒馆老板对白")
+	check(router.page.contains("马可波罗，欢迎来到这个世界"), "酒馆老板对白（行首补昵称）")
 	router.handle("goto:wonggung")
 	router.handle("npc:wonggung:king")
 	check(router.page.contains("尊敬的马可波罗"), "国王对白昵称替换")
@@ -1103,6 +1127,425 @@ func _test_sell_equip(player: PlayerCore) -> void:
 		"小金丝藤回收 60（含批量入账对账）")
 
 
+# ---------- 5.12 生活系统（契约 plan-v2 §5.1-§5.4） ----------
+
+func _test_life_system(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("生活家", "♂")
+	player.rng.seed = 42
+	player.add_copper(5000)
+
+	# 自动喝药（契约 §5.1）：体力 <auto_stamina_pct% 且包内有奶瓶 → spend_stamina 自动食用
+	player.stamina = player.max_stamina()
+	player.add_stack("naiping", 1)
+	player.stamina = int(player.max_stamina() * 0.4)
+	check(player.spend_stamina(10), "体力充足可消耗")
+	check(player.count_stack("naiping") == 0, "低于阈值自动喝奶瓶")
+	check(player.stamina == player.max_stamina(), "自动喝药补满体力")
+
+	# 打坐三重校验（契约 §5.2）：无草人 / 等级不足 / 成功扣体力得经验
+	player.new_game("打坐员", "♂")
+	var res := Life.meditate(player)
+	check(not bool(res.get("ok", true)), "无草人不可打坐")
+	player.add_stack("yeqiu_caoren", 1)
+	player.level = 5
+	res = Life.meditate(player)
+	check(not bool(res.get("ok", true)), "等级不足不可打坐")
+	player.level = 10
+	player.stamina = player.max_stamina()
+	var stam0 := player.stamina
+	res = Life.meditate(player)
+	check(bool(res.get("ok", false)), "草人+等级齐备可打坐")
+	check(player.stamina == stam0 - Rules.life_meditate_stamina(), "打坐扣体力")
+	check(int(res.get("exp", 0)) == 10 * Rules.life_meditate_exp_per_level(), "打坐经验=等级×单级经验")
+	check(player.exp_cur == int(res.get("exp", 0)), "打坐经验入账")
+
+	# 钓鱼两表（契约 §5.3）：注入全权重表逐项验证（测后还原）
+	var fish_cfg: Dictionary = GameData.config.get("life", {})
+	var saved_fish: Array = (fish_cfg.get("fish_table", []) as Array).duplicate()
+	var saved_bait: Array = (fish_cfg.get("fish_table_bait", []) as Array).duplicate()
+	fish_cfg["fish_table"] = [{"id": "xiaoyu", "w": 100}]
+	fish_cfg["fish_table_bait"] = [{"id": "zhenzhu", "w": 100}]
+	router.handle("goto:haitan")
+	check(router.page.contains("钓鱼") and router.page.contains("fish:bait"), "fish_scenes 场景页显示钓鱼入口")
+	var stam1 := player.stamina
+	router.handle("fish")
+	check(player.count_stack("xiaoyu") == 1, "钓鱼按 fish_table 入包")
+	player.add_stack("xiaoyu_huoer", 1)
+	router.handle("fish:bait")
+	check(player.count_stack("zhenzhu") == 1, "用活饵按 bait 表入包")
+	check(player.count_stack("xiaoyu_huoer") == 0, "用活饵扣 1 条活饵")
+	check(player.stamina == stam1 - 2 * Rules.life_fish_stamina(), "钓鱼两次扣体力")
+	fish_cfg["fish_table"] = saved_fish
+	fish_cfg["fish_table_bait"] = saved_bait
+	router.handle("goto:zaugun")
+	router.handle("fish")
+	check(router.page.contains("钓不了鱼"), "非钓鱼场景拒绝")
+
+	# 种田（契约 §5.3）：播种扣种子扣体力 → 未熟不可收 → 到期收获 3 牧草
+	router.handle("goto:nungcoeng")
+	player.add_stack("mucao_zhongzi", 2)
+	var stam2 := player.stamina
+	router.handle("farm")
+	check(router.page.contains("农场"), "农场页可达")
+	router.handle("farm_plant:0")
+	check(player.count_stack("mucao_zhongzi") == 1, "播种扣种子")
+	check(player.stamina == stam2 - Rules.life_farm_stamina(), "播种扣体力")
+	check(String((player.farm_plots[0] as Dictionary).get("seed_id", "")) == "mucao_zhongzi", "地块记录种子")
+	router.handle("farm_harvest")
+	check(player.count_stack("mucao") == 0, "未熟不可收获")
+	var plot0: Dictionary = player.farm_plots[0]
+	plot0["planted_unix"] = int(Time.get_unix_time_from_system()) - Rules.life_farm_grow_sec() - 1
+	router.handle("farm_harvest")
+	check(player.count_stack("mucao") == Rules.life_farm_harvest_count(), "收获牧草×3")
+	check((player.farm_plots[0] as Dictionary).is_empty(), "收获后地块清空")
+	var seed_before := player.count_stack("mucao_zhongzi")
+	router.handle("farm_plant:9")
+	check(player.count_stack("mucao_zhongzi") == seed_before, "非法地块不播种")
+
+	# 潜水三路（契约 §5.4）+ 撤退清连胜（契约 §4.2）
+	var dive_cfg: Dictionary = GameData.config.get("life", {})
+	var saved_dive: Array = (dive_cfg.get("dive_table", []) as Array).duplicate()
+	router.handle("goto:tsienhoi")
+	dive_cfg["dive_table"] = [{"id": "nothing", "w": 100}]
+	router.handle("dive")
+	check(router.page.contains("什么也没捞到"), "潜水空手安慰文案")
+	dive_cfg["dive_table"] = [{"id": "zhenzhu", "w": 100}]
+	router.handle("dive")
+	check(player.count_stack("zhenzhu") >= 1, "潜水捞到物品入包")
+	dive_cfg["dive_table"] = [{"id": "haihuang_suipian", "w": 100}]
+	var shards0 := int(player.quest_siren.get("shards", 0))
+	router.handle("dive")
+	check(player.count_stack("haihuang_suipian") == 1, "潜水拾得海皇碎片")
+	check(int(player.quest_siren.get("shards", 0)) == shards0 + 1, "碎片计数 +1")
+	dive_cfg["dive_table"] = [{"id": "monster:hai_yao", "w": 100}]
+	player.bump_streak()
+	player.bump_streak()
+	router.handle("dive")
+	check(router.combat != null and not router.combat.finished, "潜水遇怪进入战斗")
+	player.add_copper(1000)
+	router.handle("retreat")
+	check(router.combat == null, "潜水战斗撤退清理")
+	check(player.streak == 0 and player.momentum == 0, "撤退清连胜与士气")
+	dive_cfg["dive_table"] = saved_dive
+	router.handle("goto:zaugun")
+	router.handle("dive")
+	check(router.page.contains("没法潜水"), "非潜水场景拒绝")
+
+
+# ---------- 5.13 物品效果 / buff 卡片 / 改名 / 礼包（契约 plan-v2 §5.1/§5.7/§5.8） ----------
+
+func _test_item_effects(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("试用员", "♂")
+	player.rng.seed = 42
+	player.add_copper(100000)
+
+	# stamina 类：恢复生活体力（满时拒用防浪费）
+	player.stamina = 0
+	player.add_stack("quqibing", 1)
+	router.handle("use_item:quqibing")
+	check(player.stamina == player.max_stamina(), "曲奇饼恢复生活体力（上限截断）")
+	check(player.count_stack("quqibing") == 0, "体力食物用后消耗")
+	player.add_stack("quqibing", 1)
+	router.handle("use_item:quqibing")
+	check(player.count_stack("quqibing") == 1, "活力满时不消耗")
+
+	# buff 卡片（契约 §5.1）：双倍经验卡生效 / 与场次制取大 / 还原卡清除
+	player.add_stack("shuangbei_jingyanka", 1)
+	router.handle("use_item:shuangbei_jingyanka")
+	check(player.exp_mult() == 2.0, "双倍经验卡 exp_mult=2")
+	check(player.buffs.size() == 1, "时间制 buff 入列")
+	player.apply_exp_buff(3, 10)
+	check(player.exp_mult() == 10.0, "场次制与时间制取大")
+	player.add_stack("huanyuan_ka", 1)
+	router.handle("use_item:huanyuan_ka")
+	check(player.buffs.is_empty(), "还原卡清除时间制 buff")
+	check(player.exp_mult() == 10.0, "场次制 buff 不受还原卡影响")
+	player.exp_buff_left = 1
+	player.consume_exp_buff()
+	check(player.exp_mult() == 1.0, "场次耗尽后倍率归一")
+
+	# 乾坤袋：负重上限叠加
+	var wm0 := player.weight_max()
+	player.add_stack("qiankun_dai", 2)
+	router.handle("use_item:qiankun_dai")
+	router.handle("use_item:qiankun_dai")
+	check(player.weight_bonus == 100 and player.weight_max() == wm0 + 100, "乾坤袋 +50 负重可叠加")
+
+	# 技能书：学会攻击术；重复使用不消耗
+	player.add_stack("jineng_shu", 1)
+	router.handle("use_item:jineng_shu")
+	check(player.has_skill("attack"), "技能书学会攻击术")
+	check(player.count_stack("jineng_shu") == 0, "学会后技能书消耗")
+	player.add_stack("jineng_shu", 1)
+	router.handle("use_item:jineng_shu")
+	check(player.count_stack("jineng_shu") == 1, "已学攻击术不重复消耗")
+
+	# 打坐工具 / 任务物品：不消耗的使用反馈
+	player.add_stack("yeqiu_caoren", 1)
+	router.handle("use_item:yeqiu_caoren")
+	check(player.count_stack("yeqiu_caoren") == 1, "野球草人不消耗")
+	check(router.page.contains("打坐"), "草人使用给打坐指引")
+	player.add_stack("haihuang_suipian", 1)
+	router.handle("use_item:haihuang_suipian")
+	check(player.count_stack("haihuang_suipian") == 1, "任务物品禁用不消耗")
+	check(router.page.contains("任务信物"), "任务物品禁用提示")
+
+	# 改名（契约 §5.8）：等级校验在 router；达标后改名成功并消耗
+	player.add_stack("gaiming_ka", 1)
+	router.handle("use_item:gaiming_ka")
+	check(router.input_mode == "rename", "改名卡进入输入模式")
+	router.handle("rename", "新名字")
+	check(player.nickname == "试用员", "等级不足改名拒绝")
+	check(player.count_stack("gaiming_ka") == 1, "等级不足不消耗改名卡")
+	check(router.input_mode == "rename", "失败保持输入模式")
+	player.level = 30
+	router.handle("rename", "新名字")
+	check(player.nickname == "新名字", "改名成功")
+	check(player.count_stack("gaiming_ka") == 0, "改名成功消耗改名卡")
+
+	# 福利院礼包（契约 §5.7）：一次性领取 + 打开 contents
+	router.handle("gift_claim")
+	check(player.gift_claimed, "礼包领取标记")
+	check(player.count_stack("yufu_libao") == 1, "礼包入包")
+	var cu0 := player.copper
+	router.handle("use_item:yufu_libao")
+	check(player.copper == cu0 + 2000, "礼包开出 2000 铜贝")
+	check(player.count_stack("naiping") >= 2, "礼包开出奶瓶×2")
+	check(player.count_stack("qiankun_dai") >= 1, "礼包开出乾坤袋")
+	check(player.count_stack("yufu_libao") == 0, "礼包打开后消耗")
+	router.handle("gift_claim")
+	check(player.count_stack("yufu_libao") == 0, "礼包不可重复领取")
+
+	# 未知物品兜底
+	router.handle("use_item:nonexistent")
+	check(router.page.contains("没找到"), "未知物品兜底提示")
+
+	# 体力宝限持 2（契约 §5.1，buy 路径校验；临时给个 price 走商店，测后还原）
+	var tili: Dictionary = GameData.get_item("tili_bao")
+	var saved_price := int(tili.get("price", 0))
+	tili["price"] = 1
+	router.handle("buy_drug:tili_bao:2")
+	check(player.count_stack("tili_bao") == 2, "体力宝限持内可买 2")
+	router.handle("buy_drug:tili_bao:1")
+	check(player.count_stack("tili_bao") == 2, "体力宝限持 2 生效")
+	tili["price"] = saved_price
+
+
+# ---------- 5.14 装备词条 / 强化 / 宝石 / 绑定禁卖（契约 plan-v2 §5.12） ----------
+
+func _test_equipment_affixes(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("锻造师", "♂")
+	player.rng.seed = 42
+	player.add_copper(100000)
+	player.level = 10  # 粗制铜盔 req_level=4，护甲穿戴用例需等级达标
+
+	# 护甲穿戴：def 并入、词条并入
+	var belt := player.add_equip("piyaodai")
+	check(belt >= 0 and player.equip_armor(belt), "护甲可穿戴")
+	check(player.armor_idx == belt and player.armor_def() == 1, "护甲 def 并入防御")
+	check(player.total_agility() == 2 and player.total_lucky() == 1, "敏捷/幸运词条并入")
+	var helmet := player.add_equip("cuzhitongkui")
+	check(player.equip_armor(helmet) and player.armor_idx == helmet, "换穿护甲")
+
+	# 宝石镶嵌（router 两步页）：lanbaoshi def+2；插槽满后拒绝
+	player.add_stack("lanbaoshi", 2)
+	router.handle("smith_gem")
+	check(router.page.contains("选这件"), "宝石页第一步选装备")
+	router.handle("smith_gem:%d" % helmet)
+	check(router.page.contains("蓝宝石") and router.page.contains("smith_gem:%d:lanbaoshi" % helmet), "宝石页第二步选宝石")
+	router.handle("smith_gem:%d:lanbaoshi" % helmet)
+	check(int(player.gem_bonus().get("def", 0)) == 2, "镶嵌后 gem_bonus.def +2")
+	check(player.count_stack("lanbaoshi") == 1, "镶嵌扣包")
+	router.handle("smith_gem:%d:lanbaoshi" % helmet)
+	check(player.count_stack("lanbaoshi") == 1, "插槽已满拒绝镶嵌")
+	router.handle("equip_view:%d" % helmet)
+	check(router.page.contains("宝石：") and router.page.contains("插槽"), "装备详情显示插槽与宝石")
+
+	# 强化（PlayerCore 直调）：扣龙泉水+200 铜、enhance+1、绑定
+	player.add_stack("longquanshui", 2)
+	var weapon_price := 0
+	var res := player.enhance_equip(0)
+	check(bool(res.get("ok", false)), "强化成功")
+	check(int((player.equips[0] as Dictionary).get("enhance", 0)) == 1, "强化等级 +1")
+	check(bool((player.equips[0] as Dictionary).get("bound", false)), "强化后绑定")
+	check(player.count_stack("longquanshui") == 1, "强化扣龙泉水")
+	check(player.copper == 100000 - Rules.smith_enhance_copper(), "强化扣铜贝")
+	var bare := Rules.base_atk(player.level)
+	check(player.atk_range() == Vector2i(bare.x + 9, bare.y + 23), "强化后武器攻击 ×1.05（9→9，22→23）")
+	weapon_price = int(res.get("msg", "").length())
+	check(weapon_price > 0, "强化有反馈文案")
+
+	# 强化（router 页）：两件装备列表 + 强化到 +2
+	router.handle("smith_enhance")
+	check(router.page.contains("强化装备") or router.page.contains("铁匠铺 · 强化"), "强化页可达")
+	router.handle("smith_enhance:0")
+	check(int((player.equips[0] as Dictionary).get("enhance", 0)) == 2, "router 强化 +2")
+	# 强化到上限 7：龙泉水管够，循环直到拒绝
+	player.add_stack("longquanshui", 20)
+	var guard := 0
+	res = player.enhance_equip(0)
+	while bool(res.get("ok", false)) and guard < 20:
+		res = player.enhance_equip(0)
+		guard += 1
+	check(not bool(res.get("ok", false)) and int((player.equips[0] as Dictionary).get("enhance", 0)) == Rules.smith_enhance_max(), "强化到上限 %d 后拒绝" % Rules.smith_enhance_max())
+
+	# 绑定禁卖（主进程裁决）：单件与批量都拒收
+	router.handle("sell_equip_page")
+	check(router.page.contains("绑定装备无法出售"), "回收页标注绑定不可售")
+	var copper0 := player.copper
+	router.handle("sell_equip:0")
+	check(player.copper == copper0, "绑定装备出售拒绝")
+	check(player.equips.size() >= 3, "绑定装备未被移除")
+	router.handle("sell_equip_all:hualiwandao1")
+	check(player.copper == copper0, "绑定装备批量出售拒绝")
+
+	# 铁匠购买装备（契约 §2.1 在售）：长剑 30 铜；price=0 的小刀不卖
+	var eq0 := player.equips.size()
+	var cu0 := player.copper
+	router.handle("buy_equip:changjian")
+	check(player.equips.size() == eq0 + 1 and player.copper == cu0 - 30, "铁匠购买长剑扣款入包")
+	router.handle("buy_equip:xiaodao")
+	check(player.equips.size() == eq0 + 1, "price=0 装备不在售")
+	# 高阶装备（L17-22，D1 落地）在铁匠在售页全部可见且可购买
+	router.handle("goto:titzoengpou")
+	router.handle("npc:titzoengpou:smith")
+	check(router.page.contains("buy_equip:xuantiejia") and router.page.contains("buy_equip:anlinjuren")
+		and router.page.contains("buy_equip:lingzhuzhiren") and router.page.contains("buy_equip:xuantiezhongjian"),
+		"铁匠在售页列出全部高阶装备")
+	check(router.page.contains("玄铁甲") and router.page.contains("领主之刃"), "高阶装备名称渲染")
+	var hq0 := player.copper
+	router.handle("buy_equip:xuantiezhongjian")
+	check(player.copper == hq0 - 16000
+		and player.equips.any(func(inst: Dictionary) -> bool: return String(inst.get("id", "")) == "xuantiezhongjian"),
+		"高阶装备可 buy_equip 入包")
+
+	# 商店过滤（契约 §2.1）：price>0 功能道具在售；任务物品/宝石/price=0 不在售
+	router.handle("goto:soengdim")
+	router.handle("npc:soengdim:merchant")
+	check(router.page.contains("buy_drug:quqibing:1"), "商店卖曲奇饼")
+	check(router.page.contains("疗效+30"), "商店保留体力药疗效文案")
+	check(not router.page.contains("buy_drug:tili_bao"), "商店不卖体力宝")
+	check(not router.page.contains("buy_drug:hongbaoshi"), "商店不卖宝石")
+	check(not router.page.contains("buy_drug:shibeijingyandan"), "商店不卖加速丹")
+	var q0 := player.count_stack("quqibing")
+	var cq := player.copper
+	router.handle("buy_drug:quqibing:1")
+	check(player.count_stack("quqibing") == q0 + 1 and player.copper == cq - 150, "商店买曲奇饼扣款 150")
+
+
+# ---------- 5.15 任务链（安德鲁/西利亚/谜语，契约 plan-v2 §5.5-§5.6） ----------
+
+func _test_quests(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("冒险家", "♂")
+	player.rng.seed = 42
+	player.add_copper(100000)
+
+	# 安德鲁：接受 → 重复拒绝
+	router.handle("goto:zaugun")
+	router.handle("npc:zaugun:andedalu")
+	check(router.page.contains("接下试炼"), "安德鲁试炼页可接")
+	router.handle("quest_andrew:accept")
+	check(String(player.quest_andrew.get("state", "")) == "active", "试炼接受")
+	check(int(player.quest_andrew.get("day", -1)) == player.current_day(), "试炼记录当日")
+	router.handle("quest_andrew:accept")
+	check(router.page.contains("已经有安排"), "同日重复接取拒绝")
+
+	# 野外击杀计数
+	router.handle("goto:nungcoeng")
+	router.handle("fight:bingji")
+	router.combat.monster_hp = 1
+	router.combat.monster_def = 0
+	router.handle("attack")
+	check(router.combat.finished and router.combat.won, "战胜病鸡")
+	check(int(player.quest_andrew.get("kills", 0)) == 1, "野外击杀计数 +1")
+	router.handle("combat_leave")
+
+	# 地宫击杀不计（契约 §5.5）
+	player.add_exp(5000)
+	check(player.level >= 5, "升到 5 级")
+	router.handle("goto:baksingmun")
+	router.handle("dungeon_try")
+	check(player.location == Rules.dungeon_scene(), "进入地宫")
+	router.handle("fight:%s" % Rules.dungeon_monster())
+	router.combat.monster_hp = 1
+	router.combat.monster_def = 0
+	router.handle("attack")
+	check(router.combat.finished and router.combat.won, "战胜抢劫者")
+	check(int(player.quest_andrew.get("kills", 0)) == 1, "地宫击杀不计入试炼")
+	router.handle("combat_leave")
+
+	# 领奖：计数不足拒绝 / 达标领 jineng_shu+1000 铜 / 重复拒绝 / 次日可重接
+	player.quest_andrew["kills"] = 9
+	var cu0 := player.copper
+	router.handle("quest_andrew:claim")
+	check(player.copper == cu0 and player.count_stack("jineng_shu") == 0, "计数不足不发奖")
+	check(router.page.contains("还差"), "计数不足提示")
+	player.quest_andrew["kills"] = 10
+	router.handle("quest_andrew:claim")
+	check(player.copper == cu0 + Rules.quest_andrew_reward_copper(), "领奖 +1000 铜")
+	check(player.count_stack("jineng_shu") == 1, "领奖技能书入包")
+	check(String(player.quest_andrew.get("state", "")) == "claimed", "领奖后状态 claimed")
+	var cu1 := player.copper
+	router.handle("quest_andrew:claim")
+	check(player.copper == cu1, "同日重复领奖拒绝")
+	router.handle("quest_andrew:accept")
+	check(router.page.contains("已经有安排"), "领奖当日不可重接")
+	player.quest_andrew["day"] = player.current_day() - 1
+	router.handle("quest_andrew:accept")
+	check(int(player.quest_andrew.get("kills", 0)) == 0 and String(player.quest_andrew.get("state", "")) == "active", "次日轮换可重接")
+
+	# 西利亚：碎片不足拒绝 / 集齐交付 / 一次性
+	router.handle("npc:zaugun:xiliya")
+	check(router.page.contains("海皇"), "西利亚任务页")
+	router.handle("quest_siren")
+	check(not bool(player.quest_siren.get("claimed", false)), "碎片不足不交付")
+	player.add_stack("haihuang_suipian", 2)
+	router.handle("quest_siren")
+	check(player.count_stack("haihuang_suipian") == 2, "碎片 2/3 不交付")
+	player.add_stack("haihuang_suipian", 1)
+	var lq0 := player.count_stack("longquanshui")
+	var card0 := player.count_stack("shuangbei_jingyanka")
+	router.handle("quest_siren")
+	check(player.count_stack("haihuang_suipian") == 0, "交付扣除 3 碎片")
+	check(player.count_stack("longquanshui") == lq0 + 3, "谢礼龙泉水×3")
+	check(player.count_stack("shuangbei_jingyanka") == card0 + 1, "谢礼双倍经验卡×1")
+	check(bool(player.quest_siren.get("claimed", false)), "交付后标记已领")
+	router.handle("quest_siren")
+	check(player.count_stack("longquanshui") == lq0 + 3, "谢礼不可重复领取")
+
+	# 谜语：答错无惩罚可再猜 / 答对 500 铜 / 每日限一次
+	router.handle("npc:zaugun:aobupasi")
+	check(router.page.contains("今日之谜") and router.page.contains("riddle:0"), "谜语页出题")
+	var options := Pages.riddle_options()
+	var today := player.current_day()
+	var riddle: Dictionary = Rules.quest_riddles()[Pages.riddle_day_index(today)]
+	var answer := String(riddle.get("a", ""))
+	var wrong_idx := 0
+	for i in options.size():
+		if options[i] != answer:
+			wrong_idx = i
+			break
+	var cu2 := player.copper
+	router.handle("riddle:%d" % wrong_idx)
+	check(player.copper == cu2, "答错不扣不奖")
+	check(router.page.contains("再想想"), "答错可再猜")
+	var right_idx := options.find(answer)
+	check(right_idx >= 0, "当日谜底在选项中")
+	router.handle("riddle:%d" % right_idx)
+	check(player.copper == cu2 + Rules.quest_riddle_reward_copper(), "答对 +500 铜")
+	check(player.riddle_day == today, "谜语记录当日")
+	router.handle("riddle:%d" % wrong_idx)
+	check(player.copper == cu2 + Rules.quest_riddle_reward_copper(), "每日限答一次")
+
+
 # ---------- 5.11b 自动战斗（GameScreen 真实按钮路径，tick 调快免真等） ----------
 
 func _test_auto_battle(player: PlayerCore) -> void:
@@ -1286,6 +1729,84 @@ func _test_player_roundtrip(player: PlayerCore) -> void:
 	check(clone2.read_from(old_save), "旧档读取成功")
 	check(clone2.dungeon_day == -1 and clone2.dungeon_kills == 0 and clone2.dungeon_deadline == 0, "旧档地宫字段默认值")
 	check(clone2.exp_buff_left == 0 and clone2.exp_buff_mult == 10, "旧档加速 buff 默认值")
+	clone2.queue_free()
+
+
+# ---------- 6.5 新字段存档往返 + 旧档兼容（契约 plan-v2 §4.1/§6） ----------
+
+func _test_new_fields_roundtrip(player: PlayerCore) -> void:
+	player.new_game("存档员2", "♀")
+	player.stamina = 555
+	player.weight_bonus = 50
+	var belt := player.add_equip("piyaodai")
+	check(player.equip_armor(belt), "穿戴护甲（存档准备）")
+	player.add_time_buff("exp_buff", 1.0, 2.0)
+	player.learn_skill("attack")
+	player.bump_streak()
+	player.bump_streak()
+	player.bump_streak()
+	player.quest_andrew = {"state": "active", "kills": 4, "day": 12345}
+	player.quest_siren = {"shards": 2, "claimed": false}
+	player.riddle_day = 99
+	player.farm_plots[0] = {"seed_id": "mucao_zhongzi", "planted_unix": 777}
+	player.gift_claimed = true
+	player.add_stack("lanbaoshi", 1)
+	var helmet := player.add_equip("cuzhitongkui")
+	check(player.socket_gem(helmet, "lanbaoshi").get("ok", false), "镶嵌宝石（存档准备）")
+	var h_inst: Dictionary = player.equips[helmet]
+	h_inst["enhance"] = 3
+	h_inst["bound"] = true
+
+	var save := {}
+	player.write_to(save)
+	var clone := PlayerCore.new()
+	root.add_child(clone)
+	check(clone.read_from(save), "新字段往返：read_from 成功")
+	check(clone.stamina == 555, "往返：生活体力")
+	check(clone.weight_bonus == 50, "往返：负重加成")
+	check(clone.armor_idx == belt, "往返：护甲下标")
+	check(clone.buffs.size() == 1 and String((clone.buffs[0] as Dictionary).get("kind", "")) == "exp_buff"
+		and absf(float((clone.buffs[0] as Dictionary).get("mult", 0.0)) - 2.0) < 0.001, "往返：时间制 buff")
+	check(clone.skills.has("attack"), "往返：技能")
+	check(clone.streak == 3 and clone.momentum == 3, "往返：连胜与士气")
+	check(String(clone.quest_andrew.get("state", "")) == "active" and int(clone.quest_andrew.get("kills", -1)) == 4
+		and int(clone.quest_andrew.get("day", -1)) == 12345, "往返：安德鲁任务")
+	check(int(clone.quest_siren.get("shards", -1)) == 2 and not bool(clone.quest_siren.get("claimed", true)), "往返：西利亚任务")
+	check(clone.riddle_day == 99, "往返：谜语当日")
+	check(String((clone.farm_plots[0] as Dictionary).get("seed_id", "")) == "mucao_zhongzi"
+		and int((clone.farm_plots[0] as Dictionary).get("planted_unix", 0)) == 777, "往返：农田")
+	check(clone.gift_claimed, "往返：礼包标记")
+	check((clone.equips[helmet] as Dictionary).get("gems", []).size() == 1
+		and int((clone.equips[helmet] as Dictionary).get("enhance", 0)) == 3
+		and bool((clone.equips[helmet] as Dictionary).get("bound", false)), "往返：装备实例扩展形状")
+	clone.queue_free()
+
+	# 旧档兼容：无新字段 + equips 旧形状 {id,dur} 可读，缺省补默认值
+	var old_save: Dictionary = save.duplicate(true)
+	var p: Dictionary = old_save.get("player", {})
+	for key: String in ["stamina", "weight_bonus", "armor_idx", "buffs", "skills", "streak", "momentum",
+		"quest_andrew", "quest_siren", "riddle_day", "farm_plots", "gift_claimed"]:
+		p.erase(key)
+	for inst: Dictionary in p.get("equips", []):
+		inst.erase("gems")
+		inst.erase("enhance")
+		inst.erase("bound")
+	var clone2 := PlayerCore.new()
+	root.add_child(clone2)
+	check(clone2.read_from(old_save), "旧档（无新字段）读取成功")
+	check(clone2.stamina == clone2.max_stamina(), "旧档：体力默认满")
+	check(clone2.weight_bonus == 0 and clone2.armor_idx == -1, "旧档：负重加成/护甲默认")
+	check(clone2.buffs.is_empty() and clone2.skills.is_empty(), "旧档：buff/技能默认空")
+	check(clone2.streak == 0 and clone2.momentum == 0, "旧档：连胜士气默认 0")
+	check(String(clone2.quest_andrew.get("state", "")) == "" and int(clone2.quest_andrew.get("kills", -1)) == 0
+		and int(clone2.quest_andrew.get("day", -1)) == -1, "旧档：安德鲁任务默认")
+	check(int(clone2.quest_siren.get("shards", -1)) == 0 and not bool(clone2.quest_siren.get("claimed", true)), "旧档：西利亚任务默认")
+	check(clone2.riddle_day == -1, "旧档：谜语默认")
+	check(clone2.farm_plots.size() == Rules.life_farm_plots() and (clone2.farm_plots[0] as Dictionary).is_empty(), "旧档：农田默认空地×4")
+	check(not clone2.gift_claimed, "旧档：礼包标记默认未领")
+	check((clone2.equips[helmet] as Dictionary).get("gems", []).is_empty()
+		and int((clone2.equips[helmet] as Dictionary).get("enhance", 0)) == 0
+		and not bool((clone2.equips[helmet] as Dictionary).get("bound", false)), "旧档：equips 旧形状补默认值")
 	clone2.queue_free()
 
 

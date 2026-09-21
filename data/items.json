@@ -1,5 +1,5 @@
 {
-  "_doc": "物品/装备表。华丽弯刀数据为文档✅；小金丝藤仅知名称与暴率✅，属性为🔍推断补全；商品价格✅(26/31铜贝)。卖价规则（主进程裁决）：贸易品（world.json 各港引用集合）由 Trade 引擎按港定价；非贸易 goods 的 sell_price 字段=固定回收价（材料 buy=2×sell 沿用扩展契约§3）；其余兜底为买价50%。装备 price=铁匠回炉基准价，回收价=price×economy.equip_sell_ratio_pct。",
+  "_doc": "物品/装备表。华丽弯刀数据为文档✅；小金丝藤仅知名称与暴率✅，属性为🔍推断补全；商品价格✅(26/31铜贝)。卖价规则（主进程裁决）：贸易品（world.json 各港引用集合）由 Trade 引擎按港定价；非贸易 goods 的 sell_price 字段=固定回收价（材料 buy=2×sell 沿用扩展契约§3）；其余兜底为买价50%。装备 price=铁匠回炉基准价，回收价=price×economy.equip_sell_ratio_pct。本轮增补(内容契约plan-v2§2.1)：新增20件原版物品(desc✅stuff表原文)、宝石4种(type=gem，bonus词条，来源=炼金兑换+矿洞怪掉落)、渔获/牧草5种(goods材料，sell_price只卖不买)与海皇碎片(任务物品，不可卖不可用)；equip 新增可选 slot/agility/lucky/poison_res/slots 字段，armor 用 def 替代 atk；type=item 为功能道具(effect 对象，kind 全集见契约)；tili_bao/shuangbei_jingyanka/huanyuan_ka/jineng_shu/longquanshui/yufu_libao price=0 不进商店。主进程裁决补全(装备曲线)：新增高阶装备4件(玄铁重剑L17/玄铁甲L18/暗鳞巨刃L20/领主之刃L22，atk按 min≈5.2L、max≈8.9L 锚定 dahuandao L15=79-134)，forge 材料全部取自现有材料表，price/forge铜贝沿用现有梯度(12k→16k/18k/24k/32k)。",
   "items": {
     "hualiwandao1": {
       "name": "华丽弯刀（1级）",
@@ -443,6 +443,373 @@
       "price": 0,
       "exp_buff": {"battles": 10, "multiplier": 10},
       "tiers": []
+    },
+    "changjian": {
+      "name": "长剑",
+      "type": "equip",
+      "desc": "普通的一把剑，没什么特别的",
+      "req_level": 1,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [2, 5],
+      "agility": 1,
+      "durability": 350,
+      "price": 30,
+      "stack": 1
+    },
+    "duanchui": {
+      "name": "短锤",
+      "type": "equip",
+      "desc": "很短的一把锤子，满地都是",
+      "req_level": 2,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [3, 4],
+      "agility": 1,
+      "durability": 350,
+      "price": 50,
+      "stack": 1
+    },
+    "piyaodai": {
+      "name": "皮腰带",
+      "type": "equip",
+      "desc": "皮革制成的腰带，很常见",
+      "req_level": 1,
+      "quality": "普通",
+      "slot": "armor",
+      "tradeable": true,
+      "weight": 1,
+      "def": 1,
+      "agility": 1,
+      "lucky": 1,
+      "durability": 350,
+      "price": 30,
+      "stack": 1
+    },
+    "cuzhitongkui": {
+      "name": "粗制铜盔",
+      "type": "equip",
+      "desc": "粗铜制成的头盔，粗制滥造",
+      "req_level": 4,
+      "quality": "普通",
+      "slot": "armor",
+      "tradeable": true,
+      "weight": 1,
+      "def": 1,
+      "agility": 1,
+      "lucky": 1,
+      "poison_res": 1,
+      "slots": 1,
+      "durability": 350,
+      "price": 120,
+      "stack": 1
+    },
+    "niurouxianbing": {
+      "name": "牛肉馅饼",
+      "type": "drug",
+      "desc": "使用以后恢复两百生命值",
+      "weight": 0,
+      "stack": 99,
+      "heal": 200,
+      "price": 20,
+      "tiers": [1, 10]
+    },
+    "quqibing": {
+      "name": "曲奇饼",
+      "type": "item",
+      "desc": "使用一个恢复3000体力",
+      "weight": 1,
+      "stack": 99,
+      "price": 150,
+      "effect": {"kind": "stamina", "value": 3000}
+    },
+    "tili_bao": {
+      "name": "体力宝",
+      "type": "item",
+      "desc": "内含80000体力，当体力值低于50%时自动恢复体力值，每人可同时拥有两个体力宝",
+      "weight": 1,
+      "stack": 99,
+      "price": 0,
+      "tradeable": false,
+      "limit": 2,
+      "effect": {"kind": "stamina", "value": 80000}
+    },
+    "huolong_tangyuan": {
+      "name": "火龙汤圆",
+      "type": "item",
+      "desc": "使用以后恢复500体力",
+      "weight": 1,
+      "stack": 99,
+      "price": 40,
+      "effect": {"kind": "stamina", "value": 500}
+    },
+    "naiping": {
+      "name": "奶瓶",
+      "type": "item",
+      "desc": "装有恢复体力的奶瓶，内含8000体力，当体力低于50%时自动恢复体力",
+      "weight": 1,
+      "stack": 99,
+      "price": 600,
+      "effect": {"kind": "stamina", "value": 8000}
+    },
+    "shuangbei_jingyanka": {
+      "name": "双倍经验卡",
+      "type": "item",
+      "desc": "使用后可使所有经验来源＋100%（除副本），持续一小时，不可叠加",
+      "weight": 1,
+      "stack": 99,
+      "price": 0,
+      "tradeable": false,
+      "effect": {"kind": "exp_buff", "hours": 1, "multiplier": 2.0}
+    },
+    "huanyuan_ka": {
+      "name": "还原卡",
+      "type": "item",
+      "desc": "清除所有卡片效果",
+      "weight": 1,
+      "stack": 99,
+      "price": 0,
+      "tradeable": false,
+      "effect": {"kind": "clear_buff"}
+    },
+    "qiankun_dai": {
+      "name": "乾坤袋",
+      "type": "item",
+      "desc": "打开以后增加背包50负重，可叠加使用",
+      "weight": 0,
+      "stack": 20,
+      "price": 800,
+      "effect": {"kind": "weight", "value": 50}
+    },
+    "yeqiu_caoren": {
+      "name": "野球草人",
+      "type": "item",
+      "desc": "被神秘力量激活了的野球人，用来打坐可以经验不少的经验",
+      "weight": 1,
+      "stack": 99,
+      "price": 1500,
+      "effect": {"kind": "meditate_tool", "req_level": 10}
+    },
+    "gaiming_ka": {
+      "name": "改名卡",
+      "type": "item",
+      "desc": "改名卡可用于一次更改昵称",
+      "weight": 1,
+      "stack": 99,
+      "price": 2000,
+      "effect": {"kind": "rename", "req_level": 30}
+    },
+    "jineng_shu": {
+      "name": "技能书-攻击术",
+      "type": "item",
+      "desc": "学习技能必备物品",
+      "weight": 1,
+      "stack": 99,
+      "price": 0,
+      "tradeable": false,
+      "effect": {"kind": "skill", "skill": "attack"}
+    },
+    "longquanshui": {
+      "name": "龙泉水",
+      "type": "item",
+      "desc": "来自远古森林中龙泉山脉中的龙泉水，可用于强化装备,用此水强化后装备不可交易",
+      "weight": 1,
+      "stack": 99,
+      "price": 0
+    },
+    "mucao_zhongzi": {
+      "name": "牧草种子",
+      "type": "item",
+      "desc": "使用后可以获得一个牧草种子",
+      "weight": 1,
+      "stack": 99,
+      "price": 10,
+      "effect": {"kind": "seed"}
+    },
+    "xiaoyu_huoer": {
+      "name": "小鱼活饵",
+      "type": "item",
+      "desc": "稀有鱼饵，钓鱼几率显著增加",
+      "weight": 1,
+      "stack": 99,
+      "price": 30,
+      "effect": {"kind": "bait"}
+    },
+    "yinlu_feng": {
+      "name": "引路蜂",
+      "type": "item",
+      "desc": "使用引路蜂可以直接瞬移到任务目的地",
+      "weight": 0,
+      "stack": 99,
+      "price": 300,
+      "tradeable": false,
+      "effect": {"kind": "teleport_wild"}
+    },
+    "yufu_libao": {
+      "name": "全服预约礼包100人",
+      "type": "item",
+      "desc": "使用后获得大量物资",
+      "weight": 0,
+      "stack": 99,
+      "price": 0,
+      "tradeable": false,
+      "effect": {"kind": "gift", "contents": {"copper": 2000, "naiping": 2, "shuangbei_jingyanka": 1, "huanyuan_ka": 1, "qiankun_dai": 1}}
+    },
+    "haihuang_suipian": {
+      "name": "海皇碎片",
+      "type": "item",
+      "desc": "潜水时拾得的碎片，隐隐泛着海蓝色的微光，集齐三片可交给西利亚换取海皇的谢礼。",
+      "weight": 1,
+      "stack": 99,
+      "price": 0,
+      "tradeable": false,
+      "effect": {"kind": "quest_item"}
+    },
+    "hongbaoshi": {
+      "name": "红宝石",
+      "type": "gem",
+      "desc": "打磨圆润的红色宝石，镶嵌后武器更添锋芒。",
+      "weight": 1,
+      "stack": 20,
+      "price": 400,
+      "bonus": {"atk": 3}
+    },
+    "lanbaoshi": {
+      "name": "蓝宝石",
+      "type": "gem",
+      "desc": "深邃如海的蓝色宝石，镶嵌后护具坚如磐石。",
+      "weight": 1,
+      "stack": 20,
+      "price": 300,
+      "bonus": {"def": 2}
+    },
+    "lvbaoshi": {
+      "name": "绿宝石",
+      "type": "gem",
+      "desc": "翠色欲滴的宝石，镶嵌后身手更加灵巧。",
+      "weight": 1,
+      "stack": 20,
+      "price": 200,
+      "bonus": {"agi": 2}
+    },
+    "zibaoshi": {
+      "name": "紫水晶",
+      "type": "gem",
+      "desc": "泛着紫辉的水晶，镶嵌后生命更加绵长。",
+      "weight": 1,
+      "stack": 20,
+      "price": 600,
+      "bonus": {"hp": 50}
+    },
+    "xiaoyu": {
+      "name": "小鱼",
+      "type": "goods",
+      "desc": "海滩边最寻常的渔获，晒干了是下酒的好零嘴。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 12,
+      "sell_price": 6,
+      "tiers": []
+    },
+    "daiyu": {
+      "name": "带鱼",
+      "type": "goods",
+      "desc": "银亮狭长的带鱼，渔妇们一串串提着沿街叫卖。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 24,
+      "sell_price": 12,
+      "tiers": []
+    },
+    "zhangyu": {
+      "name": "章鱼",
+      "type": "goods",
+      "desc": "八爪还在扭动的鲜章鱼，腌透了是水手们最惦记的一口。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 50,
+      "sell_price": 25,
+      "tiers": []
+    },
+    "jinqiangyu": {
+      "name": "金枪鱼",
+      "type": "goods",
+      "desc": "深海里洄游的金枪鱼，一条能顶半筐小鱼，渔人见了眼发亮。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 120,
+      "sell_price": 60,
+      "tiers": []
+    },
+    "mucao": {
+      "name": "牧草",
+      "type": "goods",
+      "desc": "农场里收割的牧草，捆得整整齐齐，牲口们最爱这一口。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 40,
+      "sell_price": 20,
+      "tiers": []
+    },
+    "xuantiezhongjian": {
+      "name": "玄铁重剑",
+      "type": "equip",
+      "desc": "整块玄铁锻成的厚脊重剑，沉逾寻常兵刃三倍，一剑劈下碎石纷飞。",
+      "req_level": 17,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [89, 150],
+      "durability": 350,
+      "price": 16000,
+      "stack": 1,
+      "forge": {"materials": {"tiekuangshi": 6, "xuantie": 4}, "copper": 7000}
+    },
+    "xuantiejia": {
+      "name": "玄铁甲",
+      "type": "equip",
+      "desc": "玄铁片缀成的重甲，鳞甲层叠如山岩，护心处留着一颗宝石凹槽。",
+      "req_level": 18,
+      "quality": "普通",
+      "slot": "armor",
+      "tradeable": true,
+      "weight": 1,
+      "def": 30,
+      "slots": 1,
+      "durability": 350,
+      "price": 18000,
+      "stack": 1,
+      "forge": {"materials": {"xuantie": 6, "eyupi": 4}, "copper": 8000}
+    },
+    "anlinjuren": {
+      "name": "暗鳞巨刃",
+      "type": "equip",
+      "desc": "深海鳄鳞与玄铁合锻的巨刃，刃身幽黑泛蓝，鳞纹层叠如暗浪。",
+      "req_level": 20,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [104, 178],
+      "durability": 400,
+      "price": 24000,
+      "stack": 1,
+      "forge": {"materials": {"shanzei_lingpai": 1, "eyupi": 4}, "copper": 9000}
+    },
+    "lingzhuzhiren": {
+      "name": "领主之刃",
+      "type": "equip",
+      "desc": "堡垒领主的佩刃，饮过百年烽火，出鞘时低鸣如泣，唯强者能压住其中煞气。",
+      "req_level": 22,
+      "quality": "史诗",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [114, 196],
+      "durability": 400,
+      "price": 32000,
+      "stack": 1,
+      "forge": {"materials": {"shanzei_lingpai": 2, "xuantie": 5}, "copper": 12000}
     }
   }
 }

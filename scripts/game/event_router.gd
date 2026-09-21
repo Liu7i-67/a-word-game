@@ -137,6 +137,50 @@ func handle(event: String, param: String = "") -> void:
 			_dungeon_try()
 		"use_drug":
 			_use_drug(arg)
+		"use_item":
+			_use_item(arg)
+		"meditate":
+			_meditate()
+		"fish":
+			_fish(arg == "bait")
+		"dive":
+			_dive()
+		"farm":
+			page = Pages.farm_page(player)
+		"farm_plant":
+			_farm_plant(int(arg))
+		"farm_harvest":
+			_farm_harvest()
+		"wild_tp":
+			_wild_tp(arg)
+		"worldmap":
+			page = Pages.worldmap_page(player)
+		"smith_enhance":
+			_smith_enhance(arg)
+		"smith_gem":
+			_smith_gem(arg, arg2)
+		"alchemy":
+			_alchemy(int(arg))
+		"circus_sell":
+			_circus_sell(arg, arg2)
+		"buy_equip":
+			_buy_equip(arg)
+		"equip_armor":
+			_equip_armor(int(arg))
+		"armor_off":
+			_armor_off(int(arg))
+		"quest_andrew":
+			_quest_andrew(arg)
+		"quest_siren":
+			_quest_siren()
+		"riddle":
+			_riddle(int(arg))
+		"skill_cast":
+			_skill_cast()
+		"gift_claim":
+			_gift_claim()
+		"rename":
+			_rename_submit(param)
 		"combat_drug":
 			_combat_drug_page()
 		"combat_use":
@@ -308,10 +352,31 @@ func _npc(scene_id: String, npc_id: String) -> void:
 				page = Pages.tavern_rumor_page(player, Trade.port_at(scene_id))
 			"dungeon_keeper":
 				_dungeon_keeper()
+			# 契约 plan-v2 §3 新 kind 全集
+			"tavern":
+				page = Pages.tavern_page(scene, player)
+			"circus":
+				page = Pages.circus_page(player, npc)
+			"alchemist":
+				page = Pages.alchemy_page(player)
+			"trainer":
+				page = Pages.trainer_page(player, npc)
+			"siren":
+				page = Pages.siren_page(player, npc)
+			"riddle":
+				page = Pages.riddle_page(player, npc)
 			_:
 				page = Pages.npc_flavor_page(npc, player)
 		return
 	page = Pages.notice_page("这里什么人也没有。", "back_game", "返回游戏")
+
+
+## 当前场景第一个指定 kind 的 NPC（找不到返回 {}）
+func _npc_by_kind(kind: String) -> Dictionary:
+	for npc: Dictionary in GameData.get_scene(player.location).get("npcs", []):
+		if String(npc.get("kind", "")) == kind:
+			return npc
+	return {}
 
 
 # ---------- 战斗 ----------
@@ -358,10 +423,16 @@ func _attack() -> void:
 		_render_combat("")
 
 
-## 胜利结算：地宫任务怪计战功 + 总线广播 + 胜利页
+## 胜利结算：地宫任务怪计战功 + 安德鲁试炼野外击杀计数 + 总线广播 + 胜利页
 func _handle_win() -> void:
 	if combat.monster_id == Rules.dungeon_monster() and player.location == Rules.dungeon_scene():
 		player.dungeon_add_kill()
+	# 安德鲁试炼（契约 plan-v2 §5.5）：每日 active 期间累计野外击杀（dungeon 不计）
+	var qa: Dictionary = player.quest_andrew
+	if String(qa.get("state", "")) == "active" and int(qa.get("day", -1)) == player.current_day() \
+			and player.location != Rules.dungeon_scene():
+		qa["kills"] = int(qa.get("kills", 0)) + 1
+		player.quest_andrew = qa
 	if bus != null:
 		bus.enemy_defeated.emit(StringName(combat.monster_id))
 		bus.battle_won.emit(StringName(combat.monster_id))
@@ -395,6 +466,7 @@ func _retreat() -> void:
 	if not player.spend_copper(cost):
 		_render_combat("撤退要 %d 铜贝，你带的钱不够！" % cost)
 		return
+	player.reset_streak()  # 契约 plan-v2 §4.2：撤退视为中断连胜（E1 引擎侧无法区分，由 router 落笔）
 	combat = null
 	page = Pages.retreat_page(cost)
 	needs_save = true
@@ -673,11 +745,21 @@ func _rumor_line(entry: Dictionary) -> String:
 func _buy_drug(id: String, qty_text: String) -> void:
 	var def := GameData.get_item(id)
 	var qty := int(qty_text)
-	if def.is_empty() or String(def.get("type", "")) != "drug" or qty <= 0:
+	var t := String(def.get("type", ""))
+	var price := int(def.get("price", 0))
+	# 契约 plan-v2 §2.1：商店在售=药品 + price>0 的功能道具（任务物品/礼包除外）
+	var eff: Dictionary = def.get("effect", {})
+	var kind := String(eff.get("kind", ""))
+	var sellable := price > 0 and ((t == "drug") or (t == "item" and kind != "quest_item" and kind != "gift"))
+	if def.is_empty() or not sellable or qty <= 0:
 		page = Pages.shop_page(player)
 		return
-	var unit := int(def.get("price", int(def.get("buy_price", 0))))
-	var cost := unit * qty
+	# 限持道具（体力宝等，契约 §5.1）：bag 持有数不得超过 limit
+	var limit := int(def.get("limit", 0))
+	if limit > 0 and player.count_stack(id) + qty > limit:
+		page = Pages.shop_result(player, "商人：%s每人限持 %d 个，你身上的已经够多了。" % [player.item_name(id), limit])
+		return
+	var cost := price * qty
 	if not player.spend_copper(cost):
 		page = Pages.shop_result(player, "商人：%d铜贝都拿不出来？出门在外钱就是命，回银行取了再来。" % cost)
 		return
@@ -896,8 +978,12 @@ func _equip_off(idx: int) -> void:
 
 
 ## 铁匠回收装备（契约 trade-spec §7）：手持先自动卸下，按基准价 40% 入账。
-## 成交后留在出售页（带成交提示继续出售），省去「返回铁匠铺→出售装备」往返
+## 成交后留在出售页（带成交提示继续出售），省去「返回铁匠铺→出售装备」往返。
+## 绑定装备不可出售回收（契约 plan-v2 主进程裁决）
 func _sell_equip(idx: int) -> void:
+	if idx >= 0 and idx < player.equips.size() and bool((player.equips[idx] as Dictionary).get("bound", false)):
+		page = Pages.sell_equip_page(player, "绑定装备无法出售——它已经认主了。")
+		return
 	var inst := player.sell_equip(idx)
 	if inst.is_empty():
 		page = Pages.sell_equip_page(player)
@@ -910,22 +996,513 @@ func _sell_equip(idx: int) -> void:
 	needs_save = true
 
 
-## 批量回收全部同名装备：倒序移除（sell_equip 内部处理手持下标前移）
+## 批量回收全部同名装备：倒序移除（sell_equip 内部处理手持下标前移）；绑定件一律不收
 func _sell_equip_all(id: String) -> void:
 	if not GameData.has_item(id):
 		page = Pages.sell_equip_page(player)
 		return
 	var unit := Rules.equip_sell_price(int(GameData.get_item(id).get("price", 0)))
 	var count := 0
+	var bound_seen := false
 	for i in range(player.equips.size() - 1, -1, -1):
-		if String(player.equips[i].get("id", "")) == id:
-			player.sell_equip(i)
-			count += 1
+		var inst: Dictionary = player.equips[i]
+		if String(inst.get("id", "")) != id:
+			continue
+		if bool(inst.get("bound", false)):
+			bound_seen = true
+			continue
+		player.sell_equip(i)
+		count += 1
 	if count == 0:
-		page = Pages.sell_equip_page(player)
+		if bound_seen:
+			page = Pages.sell_equip_page(player, "绑定装备无法出售——它已经认主了。")
+		else:
+			page = Pages.sell_equip_page(player)
 		return
 	var earn := unit * count
 	player.add_copper(earn)
 	page = Pages.sell_equip_page(player, "铁匠：成，%d件「%s」回炉我全收了，%d 铜贝拿好，别弄丢了。" % [
 		count, player.item_name(id), earn])
 	needs_save = true
+
+
+# ---------- 通用使用道具（契约 plan-v2 §3 use_item，按 effect kind 分发） ----------
+
+func _use_item(id: String) -> void:
+	var def := GameData.get_item(id)
+	if def.is_empty() or player.count_stack(id) <= 0:
+		page = Pages.notice_page("你翻遍背包也没找到这件东西。", "items:other", "返回")
+		return
+	var eff: Dictionary = def.get("effect", {})
+	match String(eff.get("kind", "")):
+		"stamina":
+			if player.stamina >= player.max_stamina():
+				page = Pages.item_used_page(player, "%s先收好——现在活力满满，喝了也是浪费。" % player.item_name(id))
+				return
+			var before := player.stamina
+			player.gain_stamina(maxi(int(eff.get("value", 0)), 0))
+			player.remove_stack(id, 1)
+			needs_save = true
+			page = Pages.item_used_page(player, "你使用了%s，生活体力 +%d（当前 %d/%d）。" % [
+				player.item_name(id), player.stamina - before, player.stamina, player.max_stamina()])
+		"exp_buff":
+			player.add_time_buff("exp_buff", float(eff.get("hours", 1.0)), float(eff.get("multiplier", 2.0)))
+			player.remove_stack(id, 1)
+			needs_save = true
+			page = Pages.item_used_page(player, "你激活了%s：%d 小时内所有经验来源 +%d%%（同类卡片不可叠加）。" % [
+				player.item_name(id), maxi(int(eff.get("hours", 1)), 1),
+				int(round((float(eff.get("multiplier", 2.0)) - 1.0) * 100.0))])
+		"clear_buff":
+			player.clear_buffs()
+			player.remove_stack(id, 1)
+			needs_save = true
+			page = Pages.item_used_page(player, "你撕碎%s，所有卡片效果一扫而空。" % player.item_name(id))
+		"weight":
+			var extra := maxi(int(eff.get("value", 0)), 0)
+			player.weight_bonus += extra
+			player.remove_stack(id, 1)
+			needs_save = true
+			page = Pages.item_used_page(player, "你打开%s，背包负重上限 +%d（当前 %d/%d）。" % [
+				player.item_name(id), extra, player.weight(), player.weight_max()])
+		"rename":
+			input_mode = "rename"
+			page = Pages.rename_page(player)
+		"teleport_wild":
+			page = Pages.wild_tp_page(player)
+		"gift":
+			_open_gift(id, eff)
+		"skill":
+			var skill := String(eff.get("skill", "attack"))
+			if player.learn_skill(skill):
+				player.remove_stack(id, 1)
+				needs_save = true
+				page = Pages.item_used_page(player, "你研读%s，学会了「攻击术」！战斗中可以施展了。" % player.item_name(id))
+			else:
+				page = Pages.item_used_page(player, "你已经学会攻击术了，这本技能书用不上了。")
+		"meditate_tool":
+			page = Pages.item_used_page(player, "你把野球草人立在跟前比划了两下——打坐的法门已在心中。到安静无怪的地方点「打坐」即可修行。")
+		"bait":
+			page = Pages.item_used_page(player, "小鱼活饵要在钓鱼时选用：钓鱼入口选「用活饵钓鱼」，渔获会好上不少。")
+		"seed":
+			page = Pages.item_used_page(player, "种子要种到地里才能生根——去农场的田里「播种」吧。")
+		"quest_item":
+			page = Pages.item_used_page(player, "%s隐隐发光——这是重要的任务信物，不可使用，更不可转卖。" % player.item_name(id))
+		_:
+			if String(def.get("type", "")) == "drug":
+				_use_drug(id)  # heal 类道具走既有 drug 语义（契约：stamina/heal 走 drug 语义）
+				return
+			page = Pages.item_used_page(player, "你摆弄了半天%s，没发现它能怎么用。" % player.item_name(id))
+
+
+## 打开礼包（契约 §5.7）：按 effect.contents 发放（copper + 物品）
+func _open_gift(id: String, eff: Dictionary) -> void:
+	var contents: Dictionary = eff.get("contents", {})
+	var got: Array[String] = []
+	var copper := int(contents.get("copper", 0))
+	if copper > 0:
+		player.add_copper(copper)
+		got.append("铜贝 +%d" % copper)
+	for cid: String in contents:
+		if cid == "copper":
+			continue
+		var n := int(contents[cid])
+		if player.add_stack(cid, n):
+			got.append("%s ×%d" % [player.item_name(cid), n])
+		else:
+			got.append("%s ×%d（背包塞不下，散落了……）" % [player.item_name(cid), n])
+	player.remove_stack(id, 1)
+	needs_save = true
+	page = Pages.gift_result(player, got)
+	if bus != null:
+		for cid: String in contents:
+			if cid != "copper":
+				bus.item_obtained.emit(StringName(cid), int(contents[cid]))
+
+
+# ---------- 生活玩法（契约 plan-v2 §5.1-§5.4） ----------
+
+func _meditate() -> void:
+	var res := Life.meditate(player)
+	needs_save = bool(res.get("ok", false))
+	page = Pages.meditate_result(player, res)
+
+
+func _fish(use_bait: bool) -> void:
+	if not Rules.life_fish_scenes().has(player.location):
+		page = Pages.notice_page("这里钓不了鱼——去找海滩、浅海、暗礁或码头边的水域吧。", "back_game", "返回")
+		return
+	var res := Life.fish(player, use_bait)
+	needs_save = bool(res.get("ok", false))
+	page = Pages.fish_result(player, res, use_bait)
+
+
+func _dive() -> void:
+	if not Rules.life_dive_scenes().has(player.location):
+		page = Pages.notice_page("这里没法潜水——浅海和暗礁的水才够深。", "back_game", "返回")
+		return
+	var res := Life.dive(player)
+	var monster_id := String(res.get("monster_id", ""))
+	if monster_id != "":
+		# 潜水遇袭：由 router 起 CombatEngine 进战斗（契约 §4.3）
+		needs_save = true
+		combat = CombatEngine.new(monster_id, player)
+		_combat_show_self = false
+		_render_combat(String(res.get("msg", "水下暗流涌动——")))
+		return
+	# 拾得海皇碎片：入包 + 碎片计数（契约 §5.4）
+	if bool(res.get("ok", false)) and String(res.get("item_id", "")) == Pages.SIREN_SHARD_ID:
+		player.quest_siren["shards"] = int(player.quest_siren.get("shards", 0)) + 1
+	needs_save = bool(res.get("ok", false))
+	page = Pages.dive_result(player, res)
+
+
+func _farm_plant(slot: int) -> void:
+	if player.location != Pages.FARM_SCENE:
+		page = Pages.notice_page("种子只能在农场的田里播种。", "back_game", "返回")
+		return
+	var seed_id := _first_effect_item("seed")
+	if seed_id == "":
+		page = Pages.farm_page(player, "你包里没有种子——去商店买些牧草种子吧。")
+		return
+	var cost := Rules.life_farm_stamina()
+	if player.stamina < cost:
+		page = Pages.farm_page(player, "体力不足（播种要 %d 点），歇会再来。" % cost)
+		return
+	var res := player.plant_plot(slot, seed_id, int(Time.get_unix_time_from_system()))
+	if bool(res.get("ok", false)):
+		player.spend_stamina(cost)
+		needs_save = true
+	page = Pages.farm_page(player, String(res.get("msg", "")))
+
+
+func _farm_harvest() -> void:
+	if player.location != Pages.FARM_SCENE:
+		page = Pages.notice_page("庄稼在农场的田里，回农场才能收获。", "back_game", "返回")
+		return
+	var now := int(Time.get_unix_time_from_system())
+	var matured := 0
+	var unripe := 0
+	for i in player.farm_plots.size():
+		var res := player.harvest_plot(i, now)
+		if bool(res.get("ok", false)):
+			matured += 1
+		elif String(res.get("msg", "")).contains("还没成熟"):
+			unripe += 1
+	var notice := ""
+	if matured > 0:
+		needs_save = true
+		notice = "收获了 %d 块田的庄稼！" % matured
+	if unripe > 0:
+		notice += ("；" if notice != "" else "") + "%d 块田的庄稼还没成熟，再等等。" % unripe
+	if notice == "":
+		notice = "田都空着，先播种吧。"
+	page = Pages.farm_page(player, notice)
+
+
+## 引路蜂传送（契约 §5.9）：消耗一只，瞬移到列表内野外场景
+func _wild_tp(scene_id: String) -> void:
+	if player.count_stack(Pages.TP_BEE_ID) <= 0:
+		page = Pages.wild_tp_page(player, "引路蜂用完了，没有它可找不到路。")
+		return
+	if not Pages.wild_scenes().has(scene_id):
+		page = Pages.wild_tp_page(player, "引路蜂对着那个方向转了几圈，嗡嗡直叫——去不得。")
+		return
+	if scene_id == player.location:
+		page = Pages.wild_tp_page(player, "你就站在这儿呢。")
+		return
+	player.remove_stack(Pages.TP_BEE_ID, 1)
+	combat = null
+	player.set_location(scene_id)
+	page = Pages.scene_page(player, scene_id)
+	needs_save = true
+	if bus != null:
+		bus.scene_entered.emit(StringName(scene_id))
+
+
+# ---------- 铁匠强化 / 宝石 / 炼金 / 装备购买 / 护甲（契约 plan-v2 §5） ----------
+
+func _smith_enhance(arg: String) -> void:
+	if arg == "":
+		page = Pages.smith_enhance_page(player)
+		return
+	var idx := int(arg)
+	if idx < 0 or idx >= player.equips.size():
+		page = Pages.smith_enhance_page(player, "没有这件装备。")
+		return
+	var res := player.enhance_equip(idx)
+	needs_save = bool(res.get("ok", false))
+	page = Pages.smith_enhance_page(player, String(res.get("msg", "")))
+
+
+func _smith_gem(arg: String, arg2: String) -> void:
+	if arg == "":
+		page = Pages.smith_gem_page(player, -1)
+		return
+	var idx := int(arg)
+	if idx < 0 or idx >= player.equips.size():
+		page = Pages.smith_gem_page(player, -1, "没有这件装备。")
+		return
+	if arg2 == "":
+		page = Pages.smith_gem_page(player, idx)
+		return
+	var res := player.socket_gem(idx, arg2)
+	needs_save = bool(res.get("ok", false))
+	page = Pages.smith_gem_page(player, idx, String(res.get("msg", "")))
+
+
+## 炼金兑换（契约 §5：按 config.smith.alchemy 配方，校验材料与铜贝）
+func _alchemy(idx: int) -> void:
+	var recipes := Rules.smith_alchemy()
+	if idx < 0 or idx >= recipes.size():
+		page = Pages.alchemy_page(player)
+		return
+	var recipe: Dictionary = recipes[idx]
+	var give: Dictionary = recipe.get("give", {})
+	var get_d: Dictionary = recipe.get("get", {})
+	var missing := ""
+	for mid: String in give:
+		if mid == "copper":
+			continue
+		var lack := int(give[mid]) - player.count_stack(mid)
+		if lack > 0:
+			missing += "%s×%d " % [player.item_name(mid), lack]
+	var copper := int(give.get("copper", 0))
+	if missing != "":
+		page = Pages.alchemy_page(player, "助手：材料不齐，还缺 %s，凑齐了再来。" % missing.strip_edges())
+		return
+	if not player.spend_copper(copper):
+		page = Pages.alchemy_page(player, "助手：%d 铜贝都拿不出来？炼金的火可等不起。" % copper)
+		return
+	for mid: String in give:
+		if mid != "copper":
+			player.remove_stack(mid, int(give[mid]))
+	var gid := String(get_d.get("id", ""))
+	var gn := maxi(int(get_d.get("n", 1)), 1)
+	if not player.add_stack(gid, gn):
+		# 入包失败整体回滚（材料与铜贝退还），不吞玩家材料
+		for mid: String in give:
+			if mid == "copper":
+				player.add_copper(int(give[mid]))
+			else:
+				player.add_stack(mid, int(give[mid]))
+		page = Pages.alchemy_page(player, "助手：你包都满了，炼好的东西没地方放。")
+		return
+	needs_save = true
+	page = Pages.alchemy_page(player, "助手：炉火正好——%s×%d 炼好了，拿稳别摔了。" % [player.item_name(gid), gn])
+
+
+## 铁匠购买装备（契约 §2.1：price>0 装备在铁匠处在售）
+func _buy_equip(id: String) -> void:
+	var def := GameData.get_item(id)
+	if def.is_empty() or String(def.get("type", "")) != "equip" or int(def.get("price", 0)) <= 0:
+		page = Pages.smith_page(player)
+		return
+	var cost := int(def.get("price", 0))
+	if not player.spend_copper(cost):
+		page = Pages.smith_result(player, "铁匠：%d 铜贝都拿不出来？想清楚了再来。" % cost)
+		return
+	if player.add_equip(id) < 0:
+		player.add_copper(cost)
+		page = Pages.smith_result(player, "铁匠：你身上装备塞满了，腾个地方再来。")
+		return
+	page = Pages.smith_result(player, "铁匠：「%s」拿好，钱货两讫。" % player.item_name(id))
+	needs_save = true
+	if bus != null:
+		bus.item_obtained.emit(StringName(id), 1)
+
+
+func _equip_armor(idx: int) -> void:
+	if idx < 0 or idx >= player.equips.size():
+		page = Pages.items_page(player, "equip")
+		return
+	if not player.equip_armor(idx):
+		page = Pages.notice_page("这件护甲穿不上（等级不足、已损坏，或它不是护甲）。", "equip_view:%d" % idx, "返回")
+		return
+	needs_save = true
+	page = Pages.equip_detail(player, idx)
+
+
+func _armor_off(idx: int) -> void:
+	player.unequip_armor()
+	needs_save = true
+	page = Pages.equip_detail(player, idx)
+
+
+# ---------- 任务链 / 谜语（契约 plan-v2 §5.5-§5.6） ----------
+
+## 安德鲁试炼：accept/claim 每日轮换（day 参照 dungeon_day 的当日序号）
+func _quest_andrew(arg: String) -> void:
+	var npc := _npc_by_kind("trainer")
+	var today := player.current_day()
+	if player.has_skill("attack"):
+		page = Pages.trainer_page(player, npc, "安德鲁：你都会攻击术了，还来做什么？去海阔天空处历练吧。")
+		return
+	match arg:
+		"accept":
+			var qa: Dictionary = player.quest_andrew
+			if int(qa.get("day", -1)) == today and String(qa.get("state", "")) != "":
+				page = Pages.trainer_page(player, npc, "安德鲁：今天的试炼已经有安排了，明天再来接新的。")
+			else:
+				player.quest_andrew = {"state": "active", "kills": 0, "day": today}
+				needs_save = true
+				page = Pages.trainer_page(player, npc, "安德鲁：好胆识！击杀 %d 只野外野怪再来找我。（地宫的杀戮不算数）" % Rules.quest_andrew_kills())
+		"claim":
+			var qa: Dictionary = player.quest_andrew
+			var kills := int(qa.get("kills", 0))
+			if String(qa.get("state", "")) != "active" or int(qa.get("day", -1)) != today:
+				page = Pages.trainer_page(player, npc, "安德鲁：先把今天的试炼接下再说。")
+			elif kills < Rules.quest_andrew_kills():
+				page = Pages.trainer_page(player, npc, "安德鲁：才 %d 只？还差 %d 只，回来别想领赏。" % [
+					kills, Rules.quest_andrew_kills() - kills])
+			elif not player.add_stack("jineng_shu", 1):
+				page = Pages.trainer_page(player, npc, "安德鲁：你包都满了，技能书没地方放，腾个位置再来。")
+			else:
+				var reward := Rules.quest_andrew_reward_copper()
+				player.add_copper(reward)
+				player.quest_andrew = {"state": "claimed", "kills": kills, "day": today}
+				needs_save = true
+				page = Pages.trainer_page(player, npc, "安德鲁：说话算话——《技能书-攻击术》和 %d 铜贝都归你。去「物品→其他」研读技能书即可学会攻击术。" % reward)
+		_:
+			page = Pages.trainer_page(player, npc)
+
+
+## 西利亚海皇碎片：集 3 交付换谢礼（一次性）
+func _quest_siren() -> void:
+	var npc := _npc_by_kind("siren")
+	if bool(player.quest_siren.get("claimed", false)):
+		page = Pages.siren_page(player, npc, "西利亚：谢礼已经给过你了，莫要贪心。")
+		return
+	var need := Rules.quest_siren_shards()
+	var have := player.count_stack(Pages.SIREN_SHARD_ID)
+	if have < need:
+		page = Pages.siren_page(player, npc, "西利亚：碎片还凑不齐（%d/%d），海底再见。" % [have, need])
+		return
+	# 预检负重：谢礼不可复原，交付途中不许散落
+	var reward := Rules.quest_siren_reward()
+	var need_weight := 0
+	for rid: String in reward:
+		need_weight += int(GameData.get_item(rid).get("weight", 0)) * int(reward[rid])
+	if player.weight() + need_weight > player.weight_max():
+		page = Pages.siren_page(player, npc, "西利亚：你包都塞满了，谢礼没法给你——腾出地方再来。")
+		return
+	player.remove_stack(Pages.SIREN_SHARD_ID, need)
+	var got: Array[String] = []
+	for rid: String in reward:
+		var n := int(reward[rid])
+		player.add_stack(rid, n)
+		got.append("%s×%d" % [player.item_name(rid), n])
+	player.quest_siren["claimed"] = true
+	needs_save = true
+	page = Pages.siren_page(player, npc, "西利亚：海皇向勇士致意！谢礼收好——%s。" % "、".join(got))
+
+
+## 奥布帕斯谜语：每日一题（riddle_day 记当日），答对 500 铜，答错可再猜
+func _riddle(opt_idx: int) -> void:
+	var npc := _npc_by_kind("riddle")
+	var today := player.current_day()
+	if player.riddle_day == today:
+		page = Pages.riddle_page(player, npc, "奥布帕斯：今日的赏钱已经给过你了，明天再来。")
+		return
+	var options := Pages.riddle_options()
+	if opt_idx < 0 or opt_idx >= options.size():
+		page = Pages.riddle_page(player, npc)
+		return
+	var riddles := Rules.quest_riddles()
+	var riddle: Dictionary = riddles[Pages.riddle_day_index(today)]
+	if options[opt_idx] == String(riddle.get("a", "")):
+		player.riddle_day = today
+		var reward := Rules.quest_riddle_reward_copper()
+		player.add_copper(reward)
+		needs_save = true
+		page = Pages.riddle_page(player, npc, "奥布帕斯：妙哉！正是「%s」。这 %d 铜贝是你的了，明日再来。" % [
+			String(riddle.get("a", "")), reward])
+	else:
+		page = Pages.riddle_page(player, npc, "奥布帕斯：「%s」？哈哈，差远了。再想想，猜错不收钱。" % options[opt_idx])
+
+
+# ---------- 战斗技能 / 礼包 / 改名（契约 plan-v2 §5.7-§5.8） ----------
+
+## 攻击术（战斗中）：调 CombatEngine.cast_skill（内部扣体力、本场限一次）
+func _skill_cast() -> void:
+	if combat == null or combat.finished:
+		_back_game()
+		return
+	var res := combat.cast_skill(player)
+	if not bool(res.get("ok", false)):
+		_render_combat(String(res.get("msg", "")))
+		return
+	needs_save = true
+	if combat.finished:
+		if combat.won:
+			_handle_win()
+		else:
+			_handle_defeat()
+	else:
+		_render_combat("")
+
+
+## 德罗西动物皮收购（契约 plan-v2 §5.10）：鹅毛/狼皮按市场卖价 120% 现收
+func _circus_sell(id: String, qty_text: String) -> void:
+	if not Pages.CIRCUS_SKINS.has(id):
+		page = Pages.circus_page(player, _npc_by_kind("circus"))
+		return
+	var qty := count_sell_qty(id, qty_text)
+	var have := player.count_stack(id)
+	if qty <= 0 or have <= 0:
+		page = Pages.circus_page(player, _npc_by_kind("circus"), "德罗西：你手上哪来的皮子？")
+		return
+	qty = mini(qty, have)
+	var unit := Pages.circus_unit_price(id)
+	if not player.remove_stack(id, qty):
+		page = Pages.circus_page(player, _npc_by_kind("circus"), "德罗西：你手上哪来的皮子？")
+		return
+	var earn := unit * qty
+	player.add_copper(earn)
+	needs_save = true
+	page = Pages.circus_page(player, _npc_by_kind("circus"),
+		"德罗西：皮子我收了——%d张，%d 铜贝点好。动物们就盼着新垫子。" % [qty, earn])
+
+
+## 福利院预约礼包：一次性领取 yufu_libao×1（打开走 use_item 的 gift 分支）
+func _gift_claim() -> void:
+	if player.gift_claimed:
+		page = Pages.notice_page("福利官：预约礼包你已经领过了，一人只有一份。", "back_game", "返回")
+		return
+	if not player.add_stack("yufu_libao", 1):
+		page = Pages.notice_page("福利官：你包都满了，礼包没地方放——腾个位置再来。", "back_game", "返回")
+		return
+	player.gift_claimed = true
+	needs_save = true
+	page = Pages.gift_result(player, ["领到「全服预约礼包100人」×1！去「物品→其他」打开它。"])
+	if bus != null:
+		bus.item_obtained.emit(StringName("yufu_libao"), 1)
+
+
+## 改名提交（契约 §5.8）：等级校验在此（PlayerCore.rename 只管名字合法性）
+func _rename_submit(nick: String) -> void:
+	var card_id := _first_effect_item("rename")
+	if card_id == "":
+		page = Pages.notice_page("你包里没有改名卡。", "items:other", "返回")
+		return
+	var eff: Dictionary = GameData.get_item(card_id).get("effect", {})
+	var req := maxi(int(eff.get("req_level", 30)), 1)
+	if player.level < req:
+		input_mode = "rename"
+		page = Pages.rename_page(player, "等级不足：要 %d 级才能使用改名卡（当前 %d 级）。" % [req, player.level])
+		return
+	if not player.rename(nick):
+		input_mode = "rename"
+		page = Pages.rename_page(player, "名字不能为空，也不能超过 12 个字。")
+		return
+	player.remove_stack(card_id, 1)
+	needs_save = true
+	page = Pages.rename_result(player)
+
+
+## 包内第一个带指定 effect kind 的物品 id（没有则 ""）
+func _first_effect_item(kind: String) -> String:
+	for id: String in player.bag:
+		var eff: Dictionary = GameData.get_item(id).get("effect", {})
+		if String(eff.get("kind", "")) == kind and int(player.bag[id]) > 0:
+			return id
+	return ""
