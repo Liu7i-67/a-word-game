@@ -1,5 +1,5 @@
 {
-  "_doc": "威尼斯场景表，出口/NPC 分布按《游戏设计机制.md》§7.1；NPC 对白逐字取自 §8（占位 NPC 无文案，统一用原版占位语「暂未开放，请耐心等待。」）；场景描述文本为本复刻补写。locked=true 的出口在原版中被引用但无场景文件（未实现区域），只展示不可进入。",
+  "_doc": "威尼斯场景表，出口/NPC 分布按《游戏设计机制.md》§7.1；NPC 对白逐字取自 §8（占位 NPC 无文案，统一用原版占位语「暂未开放，请耐心等待。」）；场景描述文本为本复刻补写。locked=true 的出口在原版中被引用但无场景文件（未实现区域），只展示不可进入。本轮按扩展契约§1接入15个城外场景（on_map=false），原 locked 出口改为真实出口；soengdim 商人 kind 改为 shop、titzoengpou 铁匠 kind 改为 smith（§4.3/§4.4）；digung 威尼斯地宫为特殊场景，无出口，由探险官进入，内含秘密看守。",
   "city_map_name": "威尼斯城内地图",
   "ports": ["威尼斯", "里斯本", "亚历山大", "突尼斯", "马赛", "雅典", "伊斯坦堡", "阿尔及尔", "拉古扎", "伊斯坦布尔"],
   "regions": ["地中海", "北海", "非洲", "东亚", "印度洋"],
@@ -15,12 +15,36 @@
         {"dir": "东", "to": "nungcoeng"},
         {"dir": "西", "to": "oicingkiu"},
         {"dir": "南", "to": "geoimankeoi"},
-        {"dir": "北", "name": "矿山", "locked": true}
+        {"dir": "北", "to": "kuaangsan"}
       ],
       "npcs": [
         {"id": "guard", "name": "守卫", "kind": "flavor", "lines": ["城外很危险，你要先做好战斗的准备。打开物品栏看看还有没有苹果和各种药水出去."]},
         {"id": "explorer", "name": "探险官", "kind": "dungeon"}
       ]
+    },
+    {
+      "id": "coujin",
+      "name": "威尼斯草原",
+      "short": "草原",
+      "on_map": false,
+      "desc": "城南的风拂过齐腰的草浪，远处牧笛声隐约可闻。草丛里不时闪过灰影，野狼的眼睛在暮色里发亮。",
+      "exits": [
+        {"dir": "东", "to": "naamsingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "ye_lang", "count": 5}]
+    },
+    {
+      "id": "digung",
+      "name": "威尼斯地宫",
+      "short": "地宫",
+      "on_map": false,
+      "desc": "石阶向下沉入幽暗，烛火在潮湿的甬道里明明灭灭，墙壁上刻满褪色的祈祷文。秘密看守提着灯立在深处，一言不发地打量来客。",
+      "exits": [],
+      "npcs": [
+        {"id": "keeper", "name": "秘密看守", "kind": "dungeon_keeper"}
+      ],
+      "monsters": [{"id": "qiang_jie_zhe", "count": 5}]
     },
     {
       "id": "doucoeng",
@@ -44,10 +68,10 @@
       "on_map": true,
       "desc": "东城门外传来隐约的潮声。守卫提醒你，海滩方向最近不太平。",
       "exits": [
-        {"dir": "东", "name": "海滩", "locked": true},
+        {"dir": "东", "to": "haitan"},
         {"dir": "西", "to": "faajyun"},
-        {"dir": "南", "name": "浅海", "locked": true},
-        {"dir": "北", "name": "暗礁", "locked": true}
+        {"dir": "南", "to": "tsienhoi"},
+        {"dir": "北", "to": "ngoanzo"}
       ],
       "npcs": [
         {"id": "guard", "name": "守卫", "kind": "flavor", "lines": ["城外很危险，你要先做好战斗的准备。打开物品栏看看还有没有苹果和各种药水出去."]}
@@ -90,7 +114,7 @@
       "on_map": true,
       "desc": "彩窗把阳光滤成圣洁的颜色，管风琴低鸣。神父在祭坛前为你留了位置。",
       "exits": [
-        {"dir": "东", "name": "实验室", "locked": true},
+        {"dir": "东", "to": "soenmon"},
         {"dir": "南", "to": "naamsingmun"},
         {"dir": "北", "to": "maatau"}
       ],
@@ -145,6 +169,54 @@
       ]
     },
     {
+      "id": "gucyunlei",
+      "name": "威尼斯古村落",
+      "short": "古村落",
+      "on_map": false,
+      "desc": "残垣断壁间荒草没膝，塌了半边的石碑上字迹早已模糊。掘墓人提着铁锹在坟茔间缓缓游荡。",
+      "exits": [
+        {"dir": "西", "to": "zyuzaakkeoi"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "jue_mu_ren", "count": 5}]
+    },
+    {
+      "id": "haitan",
+      "name": "威尼斯海滩",
+      "short": "海滩",
+      "on_map": false,
+      "desc": "细沙与碎贝铺就的海滩上椰影婆娑，潮水一遍遍舔着岸线。沙盗的篝火残迹还冒着青烟。",
+      "exits": [
+        {"dir": "西", "to": "dungsingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "sha_dao", "count": 5}]
+    },
+    {
+      "id": "hauwaan",
+      "name": "威尼斯后山",
+      "short": "后山",
+      "on_map": false,
+      "desc": "山道蜿蜒直上，登顶可俯瞰全城红瓦与碧海。林深处马蹄声碎，山贼的哨音此起彼伏。",
+      "exits": [
+        {"dir": "南", "to": "zyuzaakkeoi"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "shan_zei_tou_mu", "count": 5}]
+    },
+    {
+      "id": "hongjoe",
+      "name": "威尼斯荒野",
+      "short": "荒野",
+      "on_map": false,
+      "desc": "枯草与乱石绵延到天边，风声呜咽。偶有佩剑的身影掠过丘岗，那是行走四方的流浪剑客。",
+      "exits": [
+        {"dir": "北", "to": "saisingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "liu_lang_jian_ke", "count": 5}]
+    },
+    {
       "id": "jingaujyun",
       "name": "威尼斯研究院",
       "short": "研究院",
@@ -154,6 +226,18 @@
         {"dir": "西", "to": "wonggung"}
       ],
       "npcs": []
+    },
+    {
+      "id": "kuaangsan",
+      "name": "威尼斯矿山",
+      "short": "矿山",
+      "on_map": false,
+      "desc": "矿洞口堆着锈迹斑斑的矿车，锤凿声从幽深的坑道里传出。据说深处盘踞着由岩石凝成的魔物。",
+      "exits": [
+        {"dir": "南", "to": "baksingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "kuang_dao", "count": 5}, {"id": "shi_mo", "count": 5}]
     },
     {
       "id": "maatau",
@@ -174,14 +258,38 @@
       ]
     },
     {
+      "id": "mezai",
+      "name": "威尼斯湿地",
+      "short": "湿地",
+      "on_map": false,
+      "desc": "芦苇荡间水洼连片，泥沼咕嘟作响，水鸟惊起时振翅声一片。浑浊的水面下有巨大的影子滑过。",
+      "exits": [
+        {"dir": "东", "to": "saisingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "ju_e", "count": 5}]
+    },
+    {
+      "id": "moucoeng",
+      "name": "威尼斯牧场",
+      "short": "牧场",
+      "on_map": false,
+      "desc": "木栅栏圈着成群的牛羊，草料垛散着干香。头牛喷着响鼻，警惕地盯着每一个来客。",
+      "exits": [
+        {"dir": "北", "to": "naamsingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "gong_niu", "count": 5}]
+    },
+    {
       "id": "naamsingmun",
       "name": "威尼斯南城门",
       "short": "南城门",
       "on_map": true,
       "desc": "南门外是开阔的草原与牧场，守卫懒洋洋地靠在门洞里。",
       "exits": [
-        {"dir": "西", "name": "草原", "locked": true},
-        {"dir": "南", "name": "牧场", "locked": true},
+        {"dir": "西", "to": "coujin"},
+        {"dir": "南", "to": "moucoeng"},
         {"dir": "北", "to": "gaautong"}
       ],
       "npcs": [
@@ -205,17 +313,41 @@
       ]
     },
     {
+      "id": "ngoanzo",
+      "name": "威尼斯暗礁",
+      "short": "暗礁",
+      "on_map": false,
+      "desc": "黑黢黢的礁石群露出海面，浪花拍碎其上，藤壶与牡蛎密密层层。退潮后的石缝里，礁石蟹横行无忌。",
+      "exits": [
+        {"dir": "南", "to": "dungsingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "jiao_shi_xie", "count": 5}]
+    },
+    {
       "id": "nungcoeng",
       "name": "威尼斯农场",
       "short": "农场",
       "on_map": true,
       "desc": "篱笆圈起的谷场堆着草垛，几只病鸡在泥地里扑腾，眼神不太友善。",
       "exits": [
-        {"dir": "东", "name": "农场1", "locked": true},
+        {"dir": "东", "to": "nungcoeng1"},
         {"dir": "北", "to": "baksingmun"}
       ],
       "npcs": [],
       "monsters": [{"id": "bingji", "count": 5}]
+    },
+    {
+      "id": "nungcoeng1",
+      "name": "威尼斯农场1",
+      "short": "农场1",
+      "on_map": false,
+      "desc": "越过矮篱是另一片谷场，鹅群嘎嘎乱叫，扑棱着翅膀死守它们的领地，疯劲十足。",
+      "exits": [
+        {"dir": "北", "to": "nungcoeng"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "feng_e", "count": 5}]
     },
     {
       "id": "oicingkiu",
@@ -239,9 +371,9 @@
       "desc": "西城门外雾气弥漫，据说湿地深处藏着沼泽与荒野。",
       "exits": [
         {"dir": "东", "to": "titzoengpou"},
-        {"dir": "西", "name": "湿地", "locked": true},
-        {"dir": "南", "name": "荒野", "locked": true},
-        {"dir": "北", "name": "森林", "locked": true}
+        {"dir": "西", "to": "mezai"},
+        {"dir": "南", "to": "hongjoe"},
+        {"dir": "北", "to": "zamlam"}
       ],
       "npcs": [
         {"id": "guard", "name": "守卫", "kind": "flavor", "lines": ["城外很危险，你要先做好战斗的准备。打开物品栏看看还有没有苹果和各种药水出去."]}
@@ -274,7 +406,7 @@
         {"dir": "北", "to": "zyuboudim"}
       ],
       "npcs": [
-        {"id": "merchant", "name": "商人", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+        {"id": "merchant", "name": "商人", "kind": "shop"}
       ]
     },
     {
@@ -291,6 +423,19 @@
       "npcs": []
     },
     {
+      "id": "soenmon",
+      "name": "威尼斯实验室",
+      "short": "实验室",
+      "on_map": false,
+      "desc": "铜管与曲颈瓶在昏暗中闪着微光，刺鼻的药气扑面而来。炼金炉的火苗幽幽发绿，坩埚里有什么在不安地蠕动。",
+      "exits": [
+        {"dir": "西", "to": "gaautong"},
+        {"dir": "北", "to": "zimsinguk"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "lian_jin_shi_bai_ti", "count": 5}]
+    },
+    {
       "id": "titzoengpou",
       "name": "威尼斯铁匠铺",
       "short": "铁匠铺",
@@ -301,8 +446,20 @@
         {"dir": "西", "to": "saisingmun"}
       ],
       "npcs": [
-        {"id": "smith", "name": "铁匠", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
+        {"id": "smith", "name": "铁匠", "kind": "smith"}
       ]
+    },
+    {
+      "id": "tsienhoi",
+      "name": "威尼斯浅海",
+      "short": "浅海",
+      "on_map": false,
+      "desc": "清澈的浅滩下鱼群穿梭，水藻随波摇曳。最深的地方，几条巨大的触手正懒洋洋地随浪起伏。",
+      "exits": [
+        {"dir": "北", "to": "dungsingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "hai_yao", "count": 5}]
     },
     {
       "id": "wonggung",
@@ -318,6 +475,18 @@
       "npcs": [
         {"id": "king", "name": "国王", "kind": "flavor", "lines": ["尊敬的{昵称}，你能光临这里我感到无比荣幸；"]}
       ]
+    },
+    {
+      "id": "zamlam",
+      "name": "威尼斯森林",
+      "short": "森林",
+      "on_map": false,
+      "desc": "松涛阵阵，光影在林间碎成一地斑驳，不知名的鸟鸣此起彼伏。枯枝堆后，毒蛇吐着信子，黑熊的低吼时远时近。",
+      "exits": [
+        {"dir": "南", "to": "saisingmun"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "du_she", "count": 5}, {"id": "hei_xiong", "count": 5}]
     },
     {
       "id": "zaugun",
@@ -343,12 +512,24 @@
       "desc": "星盘与水晶球挤满阁楼，女巫的猫眯着眼睛打量来客。",
       "exits": [
         {"dir": "西", "to": "maatau"},
-        {"dir": "南", "name": "实验室", "locked": true},
+        {"dir": "南", "to": "soenmon"},
         {"dir": "北", "to": "soengdim"}
       ],
       "npcs": [
         {"id": "witch", "name": "女巫", "kind": "flavor", "lines": ["暂未开放，请耐心等待。"]}
       ]
+    },
+    {
+      "id": "zozik",
+      "name": "威尼斯沼泽",
+      "short": "沼泽",
+      "on_map": false,
+      "desc": "黑水潭泛着诡异的泡沫，雾气贴着水面爬行。枯枝间偶有东西窸窣作响，一具行尸正从泥浆里缓缓坐起。",
+      "exits": [
+        {"dir": "北", "to": "zyuzaakkeoi"}
+      ],
+      "npcs": [],
+      "monsters": [{"id": "zhao_ze_xing_shi", "count": 5}]
     },
     {
       "id": "zyuboudim",
@@ -372,9 +553,9 @@
       "on_map": true,
       "desc": "高墙深院，通往古村落的路上野草蔓生。",
       "exits": [
-        {"dir": "东", "name": "古村落", "locked": true},
-        {"dir": "南", "name": "沼泽", "locked": true},
-        {"dir": "北", "name": "后山", "locked": true}
+        {"dir": "东", "to": "gucyunlei"},
+        {"dir": "南", "to": "zozik"},
+        {"dir": "北", "to": "hauwaan"}
       ],
       "npcs": []
     }

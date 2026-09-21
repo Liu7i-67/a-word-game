@@ -1,5 +1,5 @@
 {
-  "_doc": "物品/装备表。华丽弯刀数据为文档✅；小金丝藤仅知名称与暴率✅，属性为🔍推断补全；商品价格✅(26/31铜贝)，卖价为买入价50%(经济规范：买卖价差防无限套利)。",
+  "_doc": "物品/装备表。华丽弯刀数据为文档✅；小金丝藤仅知名称与暴率✅，属性为🔍推断补全；商品价格✅(26/31铜贝)，卖价为买入价50%(经济规范：买卖价差防无限套利)。本轮按扩展契约§3增补：16种材料(只卖不买，buy=2×sell)、3种药品(type=drug)、7把武器(武器掉落2把+打造5把，atk=[9+5(W-1),22+8(W-1)])。",
   "items": {
     "hualiwandao1": {
       "name": "华丽弯刀（1级）",
@@ -44,6 +44,285 @@
       "buy_price": 31,
       "sell_price": 15,
       "tiers": [900, 450, 225]
+    },
+    "emao": {
+      "name": "鹅毛",
+      "type": "goods",
+      "desc": "疯鹅身上抖落的白羽，轻得能飘在风里。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 12,
+      "sell_price": 6,
+      "tiers": []
+    },
+    "langpi": {
+      "name": "狼皮",
+      "type": "goods",
+      "desc": "灰狼的皮毛，针毛粗硬，仍带着荒野的腥气。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 20,
+      "sell_price": 10,
+      "tiers": []
+    },
+    "haizao": {
+      "name": "海藻",
+      "type": "goods",
+      "desc": "浅海里捞起的褐藻，晒干后是庄园里抢手的肥料。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 16,
+      "sell_price": 8,
+      "tiers": []
+    },
+    "niupi": {
+      "name": "牛皮",
+      "type": "goods",
+      "desc": "厚实的牛皮，鞣制后能编鞭子、做护具。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 28,
+      "sell_price": 14,
+      "tiers": []
+    },
+    "shajinshi": {
+      "name": "沙金石",
+      "type": "goods",
+      "desc": "海滩沙里淘出的金色矿石，在日光下闪闪发亮。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 36,
+      "sell_price": 18,
+      "tiers": []
+    },
+    "tiekuangshi": {
+      "name": "铁矿石",
+      "type": "goods",
+      "desc": "矿山采出的褐铁矿，敲开断面泛着银灰。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 44,
+      "sell_price": 22,
+      "tiers": []
+    },
+    "zhenzhu": {
+      "name": "珍珠",
+      "type": "goods",
+      "desc": "礁石蟹腹中育出的珍珠，圆润生光，珠宝商见了眼睛发亮。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 240,
+      "sell_price": 120,
+      "tiers": []
+    },
+    "lianjinzha": {
+      "name": "炼金残渣",
+      "type": "goods",
+      "desc": "实验室坩埚底的黑色残渣，据说内含失败的奥秘。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 160,
+      "sell_price": 80,
+      "tiers": []
+    },
+    "duyan": {
+      "name": "毒牙",
+      "type": "goods",
+      "desc": "毒蛇的獠牙，尖端还凝着一线幽绿的毒液。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 52,
+      "sell_price": 26,
+      "tiers": []
+    },
+    "xiongdan": {
+      "name": "熊胆",
+      "type": "goods",
+      "desc": "黑熊的胆，药材贩子口中以毒攻毒的大补之物。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 60,
+      "sell_price": 30,
+      "tiers": []
+    },
+    "eyupi": {
+      "name": "鳄鱼皮",
+      "type": "goods",
+      "desc": "巨鳄的皮革，鳞甲坚硬，寻常刀剑难伤分毫。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 70,
+      "sell_price": 35,
+      "tiers": []
+    },
+    "xuantie": {
+      "name": "玄铁",
+      "type": "goods",
+      "desc": "深山矿脉中的黑色金属，沉甸甸坠手，是锻造师梦寐以求的良材。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 90,
+      "sell_price": 45,
+      "tiers": []
+    },
+    "canjian": {
+      "name": "断剑",
+      "type": "goods",
+      "desc": "荒野上捡来的断剑，缺口累累，仍看得出当年的锋芒。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 110,
+      "sell_price": 55,
+      "tiers": []
+    },
+    "muzhuan": {
+      "name": "墓砖",
+      "type": "goods",
+      "desc": "古村落坟茔里起出的青砖，刻着无人认得的古老符文。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 120,
+      "sell_price": 60,
+      "tiers": []
+    },
+    "shidunang": {
+      "name": "尸毒囊",
+      "type": "goods",
+      "desc": "沼泽行尸体内的毒囊，散发着令人作呕的腥臭。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 140,
+      "sell_price": 70,
+      "tiers": []
+    },
+    "shanzei_lingpai": {
+      "name": "山贼令牌",
+      "type": "goods",
+      "desc": "山贼头目的信物，令牌在手，绿林中人都要让上三分。",
+      "weight": 0,
+      "stack": 999,
+      "buy_price": 300,
+      "sell_price": 150,
+      "tiers": []
+    },
+    "pingguo": {
+      "name": "苹果",
+      "type": "drug",
+      "desc": "脆甜的苹果，嚼两口就能缓过劲来，神父总念叨出征前记得带几个。",
+      "weight": 0,
+      "stack": 99,
+      "heal": 30,
+      "price": 8,
+      "tiers": [1, 10]
+    },
+    "xiao_yaoji": {
+      "name": "小体力药剂",
+      "type": "drug",
+      "desc": "小瓶装的体力药剂，一口下去浑身是劲，比白跑一趟教堂省事。",
+      "weight": 0,
+      "stack": 99,
+      "heal": 80,
+      "price": 25,
+      "tiers": [1, 10]
+    },
+    "da_yaoji": {
+      "name": "体力药剂",
+      "type": "drug",
+      "desc": "大瓶装的体力药剂，仰头灌下，伤势顷刻好了大半。",
+      "weight": 0,
+      "stack": 99,
+      "heal": 200,
+      "price": 60,
+      "tiers": [1, 10]
+    },
+    "liecha": {
+      "name": "猎叉",
+      "type": "equip",
+      "desc": "三股钢叉，本是猎户对付野猪的家伙，疯鹅见了都绕道。",
+      "req_level": 2,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [14, 30],
+      "durability": 250,
+      "stack": 1
+    },
+    "niupibian": {
+      "name": "牛皮鞭",
+      "type": "equip",
+      "desc": "牛皮编成的长鞭，甩起来啪啪作响，抽上一下便是一道血印。",
+      "req_level": 4,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [24, 46],
+      "durability": 250,
+      "stack": 1,
+      "forge": {"materials": {"niupi": 4}, "copper": 300}
+    },
+    "tiekuangfu": {
+      "name": "铁矿斧",
+      "type": "equip",
+      "desc": "矿山铁匠打造的重斧，一斧下去矿石四溅，砍人也一样好使。",
+      "req_level": 6,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [34, 62],
+      "durability": 300,
+      "stack": 1,
+      "forge": {"materials": {"tiekuangshi": 5}, "copper": 800}
+    },
+    "echijian": {
+      "name": "鳄齿剑",
+      "type": "equip",
+      "desc": "剑柄镶着鳄鱼獠牙的利剑，剑身泛着冷冽的寒光。",
+      "req_level": 8,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [44, 78],
+      "durability": 300,
+      "stack": 1,
+      "forge": {"materials": {"eyupi": 3, "xuantie": 2}, "copper": 1800}
+    },
+    "xuantiedao": {
+      "name": "玄铁刀",
+      "type": "equip",
+      "desc": "玄铁锻成的厚背大刀，刀身乌沉，劈砍势大力沉。",
+      "req_level": 10,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [54, 94],
+      "durability": 350,
+      "stack": 1,
+      "forge": {"materials": {"xuantie": 5}, "copper": 3200}
+    },
+    "xiangyazhang": {
+      "name": "象牙杖",
+      "type": "equip",
+      "desc": "古墓陪葬的象牙长杖，杖头雕着安眠的死者，握着寒气逼人。",
+      "req_level": 12,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [64, 110],
+      "durability": 350,
+      "stack": 1
+    },
+    "dahuandao": {
+      "name": "大环刀",
+      "type": "equip",
+      "desc": "刀背缀满钢环的大环刀，舞动时环声震耳，是绿林豪杰的心头好。",
+      "req_level": 15,
+      "quality": "普通",
+      "tradeable": true,
+      "weight": 1,
+      "atk": [79, 134],
+      "durability": 400,
+      "stack": 1,
+      "forge": {"materials": {"shanzei_lingpai": 1, "xuantie": 3}, "copper": 6000}
     }
   }
 }

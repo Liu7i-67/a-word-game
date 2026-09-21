@@ -19,6 +19,7 @@ var player_died := false
 var reward_exp := 0
 var reward_copper := 0
 var reward_item := ""
+var reward_equip := ""
 var level_gained := 0
 var weapon_broke_name := ""
 var log_lines: PackedStringArray = []
@@ -68,6 +69,20 @@ func attack_round(player: PlayerCore) -> void:
 	_trim_log()
 
 
+## 怪物还击一回合（玩家战斗中用药后）：玩家不出手、不耗武器耐久（扩展契约 §4.2）
+func monster_counter(player: PlayerCore) -> void:
+	if finished:
+		return
+	var m_hit := player.rng.randi_range(monster_atk_min, monster_atk_max)
+	var m_dmg := maxi(m_hit - player.defense(), 0)
+	var dead := player.hurt(m_dmg)
+	log_lines.append("%s趁你用药还击，造成 %d 点伤害，你剩余体力 %d/%d。" % [monster_name, m_dmg, player.hp_cur, player.max_hp()])
+	if dead:
+		finished = true
+		player_died = true
+	_trim_log()
+
+
 func retreat_cost() -> int:
 	return Rules.retreat_cost(monster_level)
 
@@ -80,6 +95,14 @@ func _grant_win_rewards(player: PlayerCore) -> void:
 	reward_copper = player.rng.randi_range(int(copper_range[0]), int(copper_range[1]))
 	if player.rng.randi() % 100 < int(m.get("drop_rate", 0)):
 		reward_item = String(m.get("drop_item", ""))
+	# 装备掉落（独立于材料掉落，扩展契约 §4.6）：命中入包，放不下降级为堆叠
+	var drop_equip: Dictionary = m.get("drop_equip", {})
+	if not drop_equip.is_empty() and player.rng.randi() % 100 < int(drop_equip.get("rate", 0)):
+		var eq_id := String(drop_equip.get("id", ""))
+		if eq_id != "" and GameData.has_item(eq_id):
+			reward_equip = eq_id
+			if player.add_equip(eq_id) < 0:
+				player.add_stack(eq_id, 1)
 	level_gained = player.add_exp(reward_exp)
 	player.add_copper(reward_copper)
 	if reward_item != "":

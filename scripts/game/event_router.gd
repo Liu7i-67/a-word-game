@@ -100,7 +100,30 @@ func handle(event: String, param: String = "") -> void:
 		"sail":
 			page = Pages.sail_page()
 		"dungeon_try":
-			page = Pages.notice_page("威尼斯地宫：暂未开发区域，请耐心等待", "back_game", "返回")
+			_dungeon_try()
+		"use_drug":
+			_use_drug(arg)
+		"combat_drug":
+			_combat_drug_page()
+		"combat_use":
+			_combat_use(arg)
+		"combat_back":
+			if combat == null or combat.finished:
+				_back_game()
+			else:
+				_render_combat("")
+		"buy_drug":
+			_buy_drug(arg, arg2)
+		"shop":
+			page = Pages.shop_page(player)
+		"smith":
+			page = Pages.smith_page(player)
+		"repair_hand":
+			_repair_hand()
+		"forge_page":
+			page = Pages.forge_page(player)
+		"forge":
+			_forge(arg)
 		"fight":
 			_fight(arg)
 		"attack":
@@ -158,11 +181,30 @@ func _goto(scene_id: String) -> void:
 		page = Pages.notice_page("那条路走不通……", "back_game", "返回游戏")
 		return
 	combat = null
+	if scene_id == Rules.dungeon_scene():
+		_enter_dungeon()
+		return
 	player.set_location(scene_id)
 	page = Pages.scene_page(player, scene_id)
 	needs_save = true
 	if bus != null:
 		bus.scene_entered.emit(StringName(scene_id))
+
+
+## 进出地宫都要先核对时限：超时清空本轮进度（dungeon_day 保留）并送回北城门
+func _enter_dungeon() -> void:
+	needs_save = true
+	if player.dungeon_expired():
+		player.dungeon_clear_progress()
+		player.set_location(Rules.dungeon_exit_scene())
+		page = Pages.dungeon_timeout_page()
+		if bus != null:
+			bus.scene_entered.emit(StringName(Rules.dungeon_exit_scene()))
+		return
+	player.set_location(Rules.dungeon_scene())
+	page = Pages.dungeon_page(player)
+	if bus != null:
+		bus.scene_entered.emit(StringName(Rules.dungeon_scene()))
 
 
 func _back_game() -> void:
@@ -199,6 +241,12 @@ func _npc(scene_id: String, npc_id: String) -> void:
 				page = Pages.sail_page()
 			"dungeon":
 				page = Pages.explorer_page(player)
+			"shop":
+				page = Pages.shop_page(player)
+			"smith":
+				page = Pages.smith_page(player)
+			"dungeon_keeper":
+				_dungeon_keeper()
 			_:
 				page = Pages.npc_flavor_page(npc, player)
 		return
@@ -210,6 +258,12 @@ func _npc(scene_id: String, npc_id: String) -> void:
 func _fight(monster_id: String) -> void:
 	if not GameData.has_monster(monster_id):
 		page = Pages.notice_page("目标不见了。", "back_game", "返回游戏")
+		return
+	if player.location == Rules.dungeon_scene() and player.dungeon_expired():
+		player.dungeon_clear_progress()
+		player.set_location(Rules.dungeon_exit_scene())
+		needs_save = true
+		page = Pages.dungeon_timeout_page()
 		return
 	combat = CombatEngine.new(monster_id, player)
 	_combat_show_self = false
@@ -226,25 +280,40 @@ func _attack() -> void:
 		bus.weapon_broken.emit(combat.weapon_broke_name)
 	if combat.finished:
 		if combat.won:
-			if bus != null:
-				bus.enemy_defeated.emit(StringName(combat.monster_id))
-				bus.battle_won.emit(StringName(combat.monster_id))
-				if combat.reward_item != "":
-					bus.item_obtained.emit(StringName(combat.reward_item), 1)
-				if combat.level_gained > 0:
-					bus.leveled_up.emit(player.level)
-			page = Pages.win_page(combat)
+			_handle_win()
 		else:
-			var lost := Rules.death_loss(player.copper)
-			player.take_copper(lost)
-			player.heal(Rules.revive_hp(player.max_hp()))
-			player.set_location(Rules.revive_scene())
-			page = Pages.lose_page(combat, lost, String(GameData.get_scene(player.location).get("name", "")))
-			if bus != null:
-				bus.battle_lost.emit(StringName(combat.monster_id))
-				bus.player_died.emit(StringName(combat.monster_id))
+			_handle_defeat()
 	else:
 		_render_combat("")
+
+
+## 胜利结算：地宫任务怪计战功 + 总线广播 + 胜利页
+func _handle_win() -> void:
+	if combat.monster_id == Rules.dungeon_monster() and player.location == Rules.dungeon_scene():
+		player.dungeon_add_kill()
+	if bus != null:
+		bus.enemy_defeated.emit(StringName(combat.monster_id))
+		bus.battle_won.emit(StringName(combat.monster_id))
+		if combat.reward_item != "":
+			bus.item_obtained.emit(StringName(combat.reward_item), 1)
+		if combat.reward_equip != "":
+			bus.item_obtained.emit(StringName(combat.reward_equip), 1)
+		if combat.level_gained > 0:
+			bus.leveled_up.emit(player.level)
+	page = Pages.win_page(combat, player)
+
+
+## 战败处理（普通攻击与战斗中用药共用）：清地宫进度 → 回城复活
+func _handle_defeat() -> void:
+	player.dungeon_clear_progress()
+	var lost := Rules.death_loss(player.copper)
+	player.take_copper(lost)
+	player.heal(Rules.revive_hp(player.max_hp()))
+	player.set_location(Rules.revive_scene())
+	page = Pages.lose_page(combat, lost, String(GameData.get_scene(player.location).get("name", "")))
+	if bus != null:
+		bus.battle_lost.emit(StringName(combat.monster_id))
+		bus.player_died.emit(StringName(combat.monster_id))
 
 
 func _retreat() -> void:
@@ -396,6 +465,157 @@ func _sell(item_id: String, qty_text: String) -> void:
 
 func count_sell_qty(item_id: String, qty_text: String) -> int:
 	return player.count_stack(item_id) if qty_text == "all" else int(qty_text)
+
+
+# ---------- 商店 / 药品（扩展契约 §4.1、§4.3） ----------
+
+func _buy_drug(id: String, qty_text: String) -> void:
+	var def := GameData.get_item(id)
+	var qty := int(qty_text)
+	if def.is_empty() or String(def.get("type", "")) != "drug" or qty <= 0:
+		page = Pages.shop_page(player)
+		return
+	var unit := int(def.get("price", int(def.get("buy_price", 0))))
+	var cost := unit * qty
+	if not player.spend_copper(cost):
+		page = Pages.shop_result(player, "商人：%d铜贝都拿不出来？出门在外钱就是命，回银行取了再来。" % cost)
+		return
+	if not player.add_stack(id, qty):
+		player.add_copper(cost)
+		page = Pages.shop_result(player, "商人：你身上药都塞不下了，先吃掉几瓶再来。")
+		return
+	page = Pages.shop_result(player, "你买下了 %d 瓶%s，花费 %d 铜贝。" % [qty, player.item_name(id), cost])
+	needs_save = true
+	if bus != null:
+		bus.item_obtained.emit(StringName(id), qty)
+
+
+func _use_drug(id: String) -> void:
+	var msg := ""
+	match player.use_drug(id):
+		"":
+			needs_save = true
+			msg = "你服下了%s，体力恢复到 %d/%d，浑身是劲。" % [player.item_name(id), player.hp_cur, player.max_hp()]
+		"full":
+			msg = "你现在体力充沛，不用吃药，留着救急吧。"
+		_:
+			msg = "你翻遍背包也没找到这种药。"
+	page = Pages.drug_result(player, msg)
+
+
+# ---------- 铁匠（扩展契约 §4.4） ----------
+
+func _repair_hand() -> void:
+	var inst := player.hand_item()
+	if inst.is_empty():
+		page = Pages.smith_result(player, "铁匠：你两手空空，让我修什么？先去打造一件吧。")
+		return
+	var missing := player.hand_missing_dur()
+	if missing <= 0:
+		page = Pages.smith_result(player, "铁匠：你这把武器好端端的，修什么修？")
+		return
+	var cost := Rules.repair_cost(missing)
+	if not player.spend_copper(cost):
+		page = Pages.smith_result(player, "铁匠：修这 %d 点缺口要 %d 铜贝，你钱不够，攒攒再来。" % [missing, cost])
+		return
+	var name := player.item_name(String(inst.get("id", "")))
+	player.repair_hand()
+	page = Pages.smith_result(player, "铁匠：叮叮当当一阵锤，「%s」的耐久补满了，收你 %d 铜贝。" % [name, cost])
+	needs_save = true
+
+
+func _forge(id: String) -> void:
+	var def := GameData.get_item(id)
+	var forge: Dictionary = def.get("forge", {})
+	if def.is_empty() or forge.is_empty():
+		page = Pages.forge_page(player)
+		return
+	var mats: Dictionary = forge.get("materials", {})
+	var missing := ""
+	for mid: String in mats:
+		var need := int(mats[mid])
+		if player.count_stack(mid) < need:
+			missing += "%s×%d " % [player.item_name(mid), need - player.count_stack(mid)]
+	if missing != "":
+		page = Pages.smith_result(player, "铁匠：材料不齐，还缺 %s，凑齐了再来。" % missing.strip_edges())
+		return
+	var cost := int(forge.get("copper", 0))
+	if not player.spend_copper(cost):
+		page = Pages.smith_result(player, "铁匠：工钱 %d 铜贝都凑不出来？去去去，攒够了再来。" % cost)
+		return
+	for mid: String in mats:
+		player.remove_stack(mid, int(mats[mid]))
+	if player.add_equip(id) < 0:
+		for mid: String in mats:
+			player.add_stack(mid, int(mats[mid]))
+		player.add_copper(cost)
+		page = Pages.smith_result(player, "铁匠：你包都塞满了，装备往哪儿放？腾个地方再来。")
+		return
+	page = Pages.smith_result(player, "铁匠：好一件「%s」！火候正好，拿去试试身手。" % player.item_name(id))
+	needs_save = true
+	if bus != null:
+		bus.item_obtained.emit(StringName(id), 1)
+
+
+# ---------- 威尼斯地宫（扩展契约 §4.5） ----------
+
+func _dungeon_try() -> void:
+	if not GameData.has_scene(Rules.dungeon_scene()):
+		page = Pages.notice_page("威尼斯地宫：暂未开发区域，请耐心等待", "back_game", "返回")
+		return
+	match player.dungeon_try_enter():
+		"":
+			_enter_dungeon()
+		"level":
+			var range_lv := Rules.dungeon_level_range()
+			page = Pages.notice_page("探险官：你的级别不在 %d-%d 级之内，地宫的规矩不能破。" % [range_lv.x, range_lv.y], "back_game", "返回")
+		_:
+			page = Pages.notice_page("探险官：今天你已经进过一次地宫了，地宫一日一开，明天再来吧。", "back_game", "返回")
+
+
+func _dungeon_keeper() -> void:
+	if player.dungeon_kills < Rules.dungeon_kill_goal():
+		page = Pages.dungeon_keeper_page(player)
+		return
+	var copper_reward := Rules.dungeon_reward_copper()
+	var gold_reward := Rules.dungeon_reward_gold()
+	player.add_copper(copper_reward)
+	player.add_gold(gold_reward)
+	player.dungeon_clear_progress()
+	needs_save = true
+	page = Pages.dungeon_reward_page(copper_reward, gold_reward)
+	if bus != null:
+		bus.dungeon_cleared.emit(copper_reward, gold_reward)
+
+
+# ---------- 战斗中用药（扩展契约 §4.2） ----------
+
+func _combat_drug_page() -> void:
+	if combat == null or combat.finished:
+		_back_game()
+		return
+	page = Pages.combat_drug_page(combat, player)
+
+
+func _combat_use(drug_id: String) -> void:
+	if combat == null or combat.finished:
+		_back_game()
+		return
+	var hp_before := player.hp_cur
+	match player.use_drug(drug_id):
+		"none":
+			_render_combat("你翻遍背包也没找到这种药。")
+			return
+		"full":
+			_render_combat("你现在体力充沛，先省着点药。")
+			return
+	var healed := player.hp_cur - hp_before
+	combat.monster_counter(player)
+	needs_save = true
+	if combat.finished and not combat.won:
+		_handle_defeat()
+		return
+	_render_combat("你服下了%s，体力+%d。" % [player.item_name(drug_id), healed])
 
 
 # ---------- 码头 / 传送 ----------

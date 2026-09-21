@@ -25,6 +25,11 @@ func _process(_delta: float) -> bool:
 	_test_player(player)
 	_test_combat(player)
 	_test_router(player)
+	_test_drug_and_shop(player)
+	_test_combat_drug(player)
+	_test_smith(player)
+	_test_dungeon(player)
+	_test_drop_equip(player)
 	_test_title_click_path(player)
 	_test_player_roundtrip(player)
 	_test_save_manager()
@@ -52,10 +57,10 @@ func _test_data() -> void:
 	check(String(t.get("name", "")) == "縱橫四海", "标题页名字错误")
 	check(not GameData.items.is_empty(), "items.json 未加载")
 	check(GameData.monsters.has("bingji"), "缺少怪物：病鸡")
-	check(GameData.scenes_by_id.size() == 25, "场景数应为 25，实际 %d" % GameData.scenes_by_id.size())
+	check(GameData.scenes_by_id.size() >= 25, "场景数应 ≥25（原版 25 + 城外扩展），实际 %d" % GameData.scenes_by_id.size())
 	check(GameData.ports.size() == 10, "传送港口应为 10 个")
 
-	var npc_kinds := ["flavor", "welfare", "church", "bank", "casino", "market", "teleport", "sail", "dungeon"]
+	var npc_kinds := ["flavor", "welfare", "church", "bank", "casino", "market", "teleport", "sail", "dungeon", "shop", "smith", "dungeon_keeper"]
 	for id in GameData.scene_order:
 		var scene: Dictionary = GameData.scenes_by_id[id]
 		check(String(scene.get("name", "")) != "", "场景 %s 缺 name" % id)
@@ -80,6 +85,11 @@ func _test_data() -> void:
 		var m: Dictionary = GameData.monsters[mid]
 		var drop := String(m.get("drop_item", ""))
 		check(drop == "" or GameData.items.has(drop), "怪物 %s 掉落物 %s 不存在" % [mid, drop])
+		var drop_equip: Dictionary = m.get("drop_equip", {})
+		if not drop_equip.is_empty():
+			var eq_id := String(drop_equip.get("id", ""))
+			check(GameData.items.has(eq_id), "怪物 %s drop_equip %s 不存在" % [mid, eq_id])
+			check(int(drop_equip.get("rate", 0)) >= 0 and int(drop_equip.get("rate", 0)) <= 100, "怪物 %s drop_equip 概率非法" % mid)
 		var atk: Array = m.get("atk", [])
 		check(atk.size() == 2 and int(atk[1]) >= int(atk[0]), "怪物 %s 攻击区间非法" % mid)
 		var exp_r: Array = m.get("exp", [])
@@ -91,6 +101,15 @@ func _test_data() -> void:
 		if String(def.get("type", "")) == "equip":
 			var atk: Array = def.get("atk", [])
 			check(atk.size() == 2 and int(atk[1]) >= int(atk[0]), "装备 %s 攻击区间非法" % iid)
+		if String(def.get("type", "")) == "drug":
+			check(int(def.get("heal", 0)) > 0, "药品 %s 缺 heal" % iid)
+			check(int(def.get("price", 0)) > 0, "药品 %s 缺 price" % iid)
+		var forge: Dictionary = def.get("forge", {})
+		if not forge.is_empty():
+			var mats: Dictionary = forge.get("materials", {})
+			check(not mats.is_empty() and int(forge.get("copper", 0)) > 0, "装备 %s forge 配置非法" % iid)
+			for mid: String in mats:
+				check(GameData.items.has(mid), "装备 %s 打造材料 %s 不存在" % [iid, mid])
 
 
 # ---------- 2. 数值公式 ----------
@@ -109,6 +128,12 @@ func _test_rules() -> void:
 	check(Rules.welfare_copper() == 10000, "福利+10000（文档✅）")
 	check(Rules.casino_bet() == 200 and Rules.casino_win() == 1000, "赌场 200/1000（文档✅）")
 	check(Rules.teleport_cost_silver() == 10, "传送 10 银（文档✅）")
+	check(Rules.repair_cost(3) == 6 and Rules.repair_cost(0) == 0, "修理价=缺口×2铜贝")
+	check(Rules.dungeon_level_range() == Vector2i(5, 15), "地宫级别 5-15（文档✅）")
+	check(Rules.dungeon_scene() == "digung" and Rules.dungeon_exit_scene() == "baksingmun", "地宫场景/出口 id")
+	check(Rules.dungeon_monster() == "qiang_jie_zhe", "地宫任务怪 id")
+	check(Rules.dungeon_kill_goal() == 40 and Rules.dungeon_time_limit_sec() == 3000, "地宫目标 40 / 时限 3000 秒")
+	check(Rules.dungeon_reward_copper() == 20000 and Rules.dungeon_reward_gold() == 1, "地宫奖励 20000 铜贝 + 1 金贝")
 
 
 # ---------- 3. 玩家状态 ----------
@@ -221,7 +246,7 @@ func _test_router(player: PlayerCore) -> void:
 	check(router.page.contains("威尼斯酒馆"), "出生场景渲染")
 	check(router.page.contains("老板(新手指引)"), "NPC 链接渲染")
 	router.handle("goto:baksingmun")
-	check(router.page.contains("北城门") and router.page.contains("矿山（暂未开放）"), "出口渲染（含锁定）")
+	check(router.page.contains("北城门") and router.page.contains("goto:kuaangsan"), "北城门出口渲染（矿山已接线）")
 	router.handle("goto:nowhere")
 	check(router.page.contains("走不通"), "非法移动兜底")
 
@@ -343,10 +368,300 @@ func _test_router(player: PlayerCore) -> void:
 	router.handle("npc:baksingmun:explorer")
 	check(router.page.contains("威尼斯地宫"), "探险官对白")
 	router.handle("dungeon_try")
-	check(router.page.contains("暂未开发区域"), "地宫占位")
+	check(player.location != Rules.dungeon_scene() and router.page.contains("级别"), "地宫入口：级别不符不放行")
 
 
-# ---------- 5.5 标题屏真实点击路径（回归：创建页必须有可见输入框） ----------
+# ---------- 5.4 药品 / 商店（扩展契约 §4.1、§4.3） ----------
+
+func _test_drug_and_shop(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("购物员", "♂")
+
+	# 商店页（npc kind=shop）
+	router.handle("goto:soengdim")
+	router.handle("npc:soengdim:merchant")
+	check(router.page.contains("威尼斯商店") and router.page.contains("疗效+30"), "商店页列出药品与疗效")
+	check(router.page.contains("buy_drug:pingguo:10"), "商店页有买 10 链接")
+
+	# 买药扣款
+	player.add_copper(1000)
+	var c0 := player.copper
+	router.handle("buy_drug:pingguo:1")
+	check(player.count_stack("pingguo") == 1, "买 1 瓶苹果入包")
+	check(player.copper == c0 - 8, "买苹果扣 8 铜贝")
+	var n0 := player.count_stack("xiao_yaoji")
+	router.handle("buy_drug:xiao_yaoji:10")
+	check(player.count_stack("xiao_yaoji") == n0 + 10, "买 10 瓶小体力药剂")
+	check(player.copper == c0 - 8 - 250, "买药扣款累计（25×10）")
+
+	# 随身不足自动折兑买药；彻底没钱给商人语气提示
+	player.bank_deposit(3)
+	player.take_copper(player.copper)
+	router.handle("buy_drug:da_yaoji:1")
+	check(player.count_stack("da_yaoji") == 1, "随身不足自动从银行折兑买到")
+	check(player.bank_silver == 2, "折兑扣 1 银")
+	player.bank_withdraw(player.bank_silver)
+	player.take_copper(player.copper)
+	router.handle("buy_drug:da_yaoji:10")
+	check(player.count_stack("da_yaoji") == 1, "钱不够不入包")
+	check(router.page.contains("商人"), "不足给商人语气提示页")
+
+	# 物品分类页 [使用] + 战斗外用药
+	player.add_copper(100)
+	router.handle("items:drug")
+	check(router.page.contains("[lb]使用[rb]") and router.page.contains("苹果"), "药品分类页列出 [使用] 链接")
+	check(router.page.contains("use_drug:pingguo"), "药品分类页使用事件")
+	player.hurt(50)
+	var hp0 := player.hp_cur
+	router.handle("use_drug:pingguo")
+	check(player.hp_cur == hp0 + 30, "用苹果 +30 体力")
+	check(player.count_stack("pingguo") == 0, "用药后数量 -1")
+	check(router.page.contains("返回"), "结果页可返回药品页")
+
+	# 满血拒绝 / 无药提示
+	player.heal(9999)
+	player.add_stack("pingguo", 1)
+	router.handle("use_drug:pingguo")
+	check(player.count_stack("pingguo") == 1, "满血不消耗药品")
+	check(router.page.contains("体力充沛"), "满血提示")
+	router.handle("use_drug:haizao")
+	check(router.page.contains("没找到"), "无药提示")
+
+
+# ---------- 5.5 战斗中用药（扩展契约 §4.2） ----------
+
+func _test_combat_drug(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("药士", "♂")
+	player.rng.seed = 42
+	player.add_stack("xiao_yaoji", 2)
+	router.handle("goto:nungcoeng")
+	router.handle("fight:bingji")
+	check(router.combat != null, "进入战斗（用药用例）")
+	player.hurt(60)
+	var hp_low := player.hp_cur
+	router.handle("combat_drug")
+	check(router.page.contains("combat_use") and router.page.contains("小体力药剂"), "战斗用药页列出背包药品")
+	router.handle("combat_use:xiao_yaoji")
+	# 先回 80 体力（上限截断），再挨病鸡还击至多 8 点
+	check(player.hp_cur >= mini(hp_low + 80, player.max_hp()) - 8, "用药回体力")
+	check(player.count_stack("xiao_yaoji") == 1, "战斗用药数量 -1")
+	check(router.combat.monster_hp == router.combat.monster_hp_max, "用药回合怪不掉血")
+	check(router.page.contains("趁你用药"), "怪物还击一回合")
+	check(router.page.contains("敌方属性"), "用药后回到战斗页")
+
+	# 满血用药：不消耗、不引来还击
+	player.heal(9999)
+	router.handle("combat_use:xiao_yaoji")
+	check(player.count_stack("xiao_yaoji") == 1, "满血用药不消耗")
+	check(router.page.contains("省着点药"), "满血用药提示")
+	check(not router.combat.finished, "满血用药不结束战斗")
+
+	# 用药回合被击杀 → 走战败流程
+	player.hurt(player.hp_cur - 1)
+	router.combat.monster_atk_min = 999
+	router.combat.monster_atk_max = 999
+	router.handle("combat_use:xiao_yaoji")
+	check(router.page.contains("战斗失败"), "用药回合被击杀走战败")
+	check(player.location == Rules.revive_scene(), "战败送回城里")
+	check(player.dungeon_kills == 0 and player.dungeon_deadline == 0, "战败清空地宫进度")
+	router.handle("combat_leave")
+	check(router.combat == null, "战斗状态清理（用药用例）")
+
+
+# ---------- 5.6 铁匠：修理 / 打造（扩展契约 §4.4） ----------
+
+func _test_smith(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("铁匠学徒", "♂")
+	router.handle("goto:titzoengpou")
+	router.handle("npc:titzoengpou:smith")
+	check(router.page.contains("威尼斯铁匠铺") and router.page.contains("修理手持"), "铁匠页")
+	check(router.page.contains("打造装备"), "铁匠页打造入口")
+
+	# 满耐久拒绝
+	var c0 := player.copper
+	router.handle("repair_hand")
+	check(player.copper == c0, "满耐久不扣款")
+	check(router.page.contains("修什么修"), "满耐久提示")
+
+	# 修理：价格 = 缺口 × 单价
+	for i in 3:
+		player.damage_hand()
+	check(player.hand_missing_dur() == 3, "耐久缺口 3")
+	player.take_copper(player.copper)
+	player.add_copper(100)
+	router.handle("repair_hand")
+	check(player.copper == 100 - Rules.repair_cost(3), "修理扣款=缺口×单价")
+	check(player.hand_missing_dur() == 0, "修理后耐久满")
+
+	# 钱不够拒绝
+	for i in 10:
+		player.damage_hand()
+	player.take_copper(player.copper)
+	router.handle("repair_hand")
+	check(player.hand_missing_dur() == 10, "钱不够不修理")
+	check(router.page.contains("不够"), "修理钱不够提示")
+
+	# 打造：成功扣材料与工钱
+	player.add_stack("niupi", 4)
+	player.add_copper(300)
+	router.handle("forge_page")
+	check(router.page.contains("牛皮鞭") and router.page.contains("forge:niupibian"), "打造页列出可打造装备")
+	var eq0 := player.equips.size()
+	router.handle("forge:niupibian")
+	check(player.equips.size() == eq0 + 1, "打造装备入包")
+	check(player.count_stack("niupi") == 0, "打造扣除材料")
+	check(player.copper == 0, "打造扣除工钱 300")
+	check(int(player.equips[eq0].get("dur", 0)) == 250, "新装备满耐久")
+
+	# 材料不足拒绝
+	router.handle("forge:niupibian")
+	check(player.equips.size() == eq0 + 1, "材料不足不重复打造")
+
+	# 工钱不足拒绝
+	player.add_stack("niupi", 4)
+	player.take_copper(player.copper)
+	router.handle("forge:niupibian")
+	check(player.count_stack("niupi") == 4, "工钱不足材料不扣")
+	check(player.equips.size() == eq0 + 1, "工钱不足不入包")
+
+
+# ---------- 5.7 威尼斯地宫（扩展契约 §4.5） ----------
+
+func _test_dungeon(player: PlayerCore) -> void:
+	var bus: Node = load("res://scripts/autoload/event_bus.gd").new()
+	root.add_child(bus)
+	var cleared := [0, 0, 0]
+	bus.dungeon_cleared.connect(func(c: int, g: int) -> void:
+		cleared[0] += c
+		cleared[1] += g
+		cleared[2] += 1
+	)
+	var router := EventRouter.new()
+	router.setup(player, bus)
+	player.new_game("探险员", "♂")
+
+	# 级别不符
+	router.handle("goto:baksingmun")
+	router.handle("npc:baksingmun:explorer")
+	router.handle("dungeon_try")
+	check(player.location != Rules.dungeon_scene(), "级别不符不放进地宫")
+
+	# 升到 5 级进入（500+1000+1500+2000 = 5000 经验）
+	player.add_exp(5000)
+	check(player.level == 5, "升到 5 级")
+	router.handle("dungeon_try")
+	check(player.location == Rules.dungeon_scene(), "5 级进入地宫")
+	check(player.dungeon_day == player.current_day(), "记录当日序号")
+	check(player.dungeon_deadline > int(Time.get_unix_time_from_system()), "设置时限")
+	check(router.page.contains("击杀进度：0/%d" % Rules.dungeon_kill_goal()), "地宫页显示进度")
+	check(router.page.contains("剩余时间："), "地宫页显示剩余时间")
+	check(router.page.contains("挑战抢劫者") and router.page.contains("秘密看守"), "地宫页链接")
+
+	# 当日重复进入拒绝
+	router.handle("goto:%s" % Rules.dungeon_exit_scene())
+	router.handle("dungeon_try")
+	check(player.location != Rules.dungeon_scene(), "当日重复进入拒绝")
+	check(router.page.contains("明天"), "重复进入提示")
+
+	# 战胜任务怪 → 计数 +1
+	player.dungeon_day = -1
+	router.handle("dungeon_try")
+	check(player.location == Rules.dungeon_scene(), "重新进入地宫")
+	router.handle("fight:%s" % Rules.dungeon_monster())
+	check(router.combat != null, "挑战抢劫者")
+	router.combat.monster_hp = 1
+	router.combat.monster_def = 0
+	router.handle("attack")
+	check(router.combat.finished and router.combat.won, "战胜抢劫者")
+	check(player.dungeon_kills == 1, "地宫击杀计数 +1")
+	check(router.page.contains("击杀进度：1/40"), "胜利页显示进度")
+	router.handle("combat_leave")
+
+	# 击杀不足 → 看守只报进度，不发奖
+	var gold0 := player.gold
+	var copper0 := player.copper
+	router.handle("npc:%s:keeper" % Rules.dungeon_scene())
+	check(player.gold == gold0 and player.copper == copper0, "击杀不足不发奖")
+	check(router.page.contains("秘密看守"), "看守页显示进度")
+
+	# 击杀达标 → 领奖（铜贝 20000 + 金贝 1）+ 信号
+	for i in Rules.dungeon_kill_goal() - 1:
+		player.dungeon_add_kill()
+	router.handle("npc:%s:keeper" % Rules.dungeon_scene())
+	check(player.copper == copper0 + Rules.dungeon_reward_copper(), "领奖铜贝 +20000")
+	check(player.gold == gold0 + Rules.dungeon_reward_gold(), "领奖金贝 +1")
+	check(player.dungeon_kills == 0 and player.dungeon_deadline == 0, "领奖后清空进度")
+	check(cleared[2] == 1 and cleared[0] == Rules.dungeon_reward_copper() and cleared[1] == Rules.dungeon_reward_gold(), "EventBus.dungeon_cleared 信号")
+	check(router.page.contains("金贝"), "领奖页")
+
+	# 超时踢出：进度清空，dungeon_day 保留防当日重复进入
+	player.dungeon_day = -1
+	router.handle("dungeon_try")
+	check(player.location == Rules.dungeon_scene(), "再进地宫（超时用例准备）")
+	for i in 3:
+		player.dungeon_add_kill()
+	player.dungeon_deadline = int(Time.get_unix_time_from_system()) - 10
+	router.handle("goto:%s" % Rules.dungeon_scene())
+	check(player.location == Rules.dungeon_exit_scene(), "超时踢出地宫")
+	check(player.dungeon_kills == 0 and player.dungeon_deadline == 0, "超时清空进度")
+	check(player.dungeon_day == player.current_day(), "超时保留当日记录")
+	check(router.page.contains("限时已到"), "超时提示页")
+	router.handle("dungeon_try")
+	check(player.location != Rules.dungeon_scene(), "超时当日仍不得再进")
+	bus.queue_free()
+
+
+# ---------- 5.8 掉落扩展 drop_equip（扩展契约 §4.6） ----------
+
+func _test_drop_equip(player: PlayerCore) -> void:
+	var feng: Dictionary = GameData.monsters.get("feng_e", {})
+	if feng.is_empty() or not GameData.items.has("liecha"):
+		print("SKIP: drop_equip 用例缺少 feng_e/liecha 数据")
+		return
+	var de: Dictionary = feng.get("drop_equip", {})
+	if de.is_empty():
+		print("SKIP: drop_equip 用例缺少 feng_e.drop_equip 字段")
+		return
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("猎人", "♂")
+	player.rng.seed = 7
+
+	# 命中路径（临时把概率改为 100%）
+	var old_rate := int(de.get("rate", 0))
+	de["rate"] = 100
+	router.handle("goto:nungcoeng")
+	router.handle("fight:feng_e")
+	router.combat.monster_hp = 1
+	router.combat.monster_def = 0
+	router.handle("attack")
+	check(router.combat.finished and router.combat.won, "战胜疯鹅")
+	check(router.combat.reward_equip == "liecha", "drop_equip 命中")
+	check(player.equips.any(func(inst: Dictionary) -> bool: return String(inst.get("id", "")) == "liecha")
+		or player.count_stack("liecha") == 1, "猎叉入包")
+	router.handle("combat_reward")
+	check(router.page.contains("获得装备"), "战利品页显示掉落装备")
+	router.handle("combat_leave")
+
+	# 未命中路径（概率 0）
+	de["rate"] = 0
+	var eq0 := player.equips.size()
+	router.handle("fight:feng_e")
+	router.combat.monster_hp = 1
+	router.combat.monster_def = 0
+	router.handle("attack")
+	check(router.combat.finished and router.combat.won, "再战疯鹅")
+	check(router.combat.reward_equip == "", "drop_equip 未命中")
+	check(player.equips.size() == eq0, "未命中不入包")
+	de["rate"] = old_rate
+
+
+# ---------- 5.9 标题屏真实点击路径（回归：创建页必须有可见输入框） ----------
 
 func _test_title_click_path(player: PlayerCore) -> void:
 	var router := EventRouter.new()
@@ -369,6 +684,9 @@ func _test_player_roundtrip(player: PlayerCore) -> void:
 	player.add_copper(888)
 	player.add_stack("putaojiu", 300)
 	player.bank_deposit(2)
+	player.dungeon_day = 12345
+	player.dungeon_kills = 7
+	player.dungeon_deadline = 999
 	var save := {}
 	player.write_to(save)
 	var clone := PlayerCore.new()
@@ -379,8 +697,21 @@ func _test_player_roundtrip(player: PlayerCore) -> void:
 	check(clone.count_stack("putaojiu") == 300, "往返：背包")
 	check(clone.hand == 0 and clone.equips.size() == 1, "往返：装备")
 	check(clone.location == "zaugun", "往返：位置")
+	check(clone.dungeon_day == 12345 and clone.dungeon_kills == 7 and clone.dungeon_deadline == 999, "往返：地宫字段")
 	var bad := clone.read_from({})
 	check(not bad, "空存档拒绝")
+
+	# 旧档兼容：缺地宫字段时取默认值
+	var old_save: Dictionary = save.duplicate(true)
+	var p: Dictionary = old_save.get("player", {})
+	p.erase("dungeon_day")
+	p.erase("dungeon_kills")
+	p.erase("dungeon_deadline")
+	var clone2 := PlayerCore.new()
+	root.add_child(clone2)
+	check(clone2.read_from(old_save), "旧档读取成功")
+	check(clone2.dungeon_day == -1 and clone2.dungeon_kills == 0 and clone2.dungeon_deadline == 0, "旧档地宫字段默认值")
+	clone2.queue_free()
 
 
 func _test_save_manager() -> void:

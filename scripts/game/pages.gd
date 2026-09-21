@@ -9,7 +9,8 @@ const SEP := " . "
 
 
 static func esc(s: String) -> String:
-	return s.replace("[", "[lb]").replace("]", "[rb]")
+	# 先换占位符再还原：防止插入的 [lb]/[rb] 自身被二次替换（标签含 [] 时）
+	return s.replace("[", "\u0001").replace("]", "\u0002").replace("\u0001", "[lb]").replace("\u0002", "[rb]")
 
 
 static func link(event: String, label: String) -> String:
@@ -214,7 +215,18 @@ static func items_page(player: PlayerCore, cat: String) -> String:
 		"gem":
 			lines.append(dim("暂无宝石。"))
 		"drug":
-			lines.append(dim("暂无药品。神父的免费治疗倒是一直都在。"))
+			var any_drug := false
+			for id: String in player.bag:
+				var def := GameData.get_item(id)
+				if String(def.get("type", "")) != "drug":
+					continue
+				any_drug = true
+				lines.append("%s ×%d 疗效+%d  %s" % [
+					esc(String(def.get("name", id))), int(player.bag[id]), int(def.get("heal", 0)),
+					link("use_drug:%s" % id, "[使用]"),
+				])
+			if not any_drug:
+				lines.append(dim("暂无药品。神父的免费治疗倒是一直都在。"))
 	lines.append("")
 	lines.append(footer())
 	return join_lines(lines)
@@ -280,9 +292,10 @@ static func combat_page(engine: CombatEngine, player: PlayerCore, show_self: boo
 	lines.append("防御：%d" % engine.monster_def)
 	lines.append("体力：%d/%d" % [engine.monster_hp, engine.monster_hp_max])
 	lines.append("")
-	lines.append("[center]%s   %s   %s[/center]" % [
+	lines.append("[center]%s   %s   %s   %s[/center]" % [
 		link("attack", "攻击"),
 		link("view", "查看"),
+		link("combat_drug", "药品"),
 		link("retreat", "撤退(%d铜贝)" % engine.retreat_cost()),
 	])
 	lines.append("你体力：%d/%d  攻击：%d-%d  防御：%d" % [
@@ -302,10 +315,12 @@ static func combat_page(engine: CombatEngine, player: PlayerCore, show_self: boo
 	return join_lines(lines)
 
 
-static func win_page(engine: CombatEngine) -> String:
+static func win_page(engine: CombatEngine, player: PlayerCore) -> String:
 	var lines: Array[String] = []
 	lines.append(header("战斗胜利"))
 	lines.append("战胜了%s！" % esc(engine.monster_name))
+	if engine.monster_id == Rules.dungeon_monster() and player.location == Rules.dungeon_scene():
+		lines.append("地宫击杀进度：%d/%d" % [player.dungeon_kills, Rules.dungeon_kill_goal()])
 	lines.append("")
 	lines.append("[center]%s   %s[/center]" % [link("back_game", "返回游戏"), link("combat_reward", "继续")])
 	return join_lines(lines)
@@ -321,10 +336,46 @@ static func reward_page(engine: CombatEngine, player: PlayerCore) -> String:
 		lines.append("[color=#ffd700]连升 %d 级！当前 %d 级。[/color]" % [engine.level_gained, player.level])
 	if engine.reward_item != "":
 		lines.append("获得装备：%s" % esc(player.item_name(engine.reward_item)))
+	if engine.reward_equip != "":
+		lines.append("获得装备：%s" % esc(player.item_name(engine.reward_equip)))
 	if engine.weapon_broke_name != "":
 		lines.append("[color=red]%s 已损坏！[/color]" % esc(engine.weapon_broke_name))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("combat_leave", "返回游戏"))
+	return join_lines(lines)
+
+
+static func combat_drug_page(engine: CombatEngine, player: PlayerCore) -> String:
+	var lines: Array[String] = []
+	lines.append(header("战斗 · 药品"))
+	lines.append("你体力：%d/%d  %s体力：%d/%d" % [
+		player.hp_cur, player.max_hp(), esc(engine.monster_name), engine.monster_hp, engine.monster_hp_max,
+	])
+	lines.append(dim("吃掉一瓶要花去一个回合，%s会趁机还手，看准了再用。" % engine.monster_name))
+	var any := false
+	for id: String in player.bag:
+		var def := GameData.get_item(id)
+		if String(def.get("type", "")) != "drug":
+			continue
+		any = true
+		lines.append("%s ×%d 疗效+%d  %s" % [
+			esc(String(def.get("name", id))), int(player.bag[id]), int(def.get("heal", 0)),
+			link("combat_use:%s" % id, "[服用]"),
+		])
+	if not any:
+		lines.append(dim("背包里已经没有药品了。"))
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("combat_back", "返回战斗"), link("retreat", "撤退(%d铜贝)" % engine.retreat_cost())])
+	return join_lines(lines)
+
+
+static func drug_result(player: PlayerCore, msg: String) -> String:
+	var lines: Array[String] = []
+	lines.append(header("药品"))
+	lines.append(esc(msg))
+	lines.append("体力：%d/%d" % [player.hp_cur, player.max_hp()])
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("items:drug", "返回"), link("back_game", "返回游戏")])
 	return join_lines(lines)
 
 
@@ -627,6 +678,112 @@ static func sell_page(player: PlayerCore) -> String:
 	return join_lines(lines)
 
 
+# ---------- 商店 / 铁匠（扩展契约 §4.3-§4.4） ----------
+
+static func shop_page(player: PlayerCore) -> String:
+	var lines: Array[String] = []
+	lines.append(header("威尼斯商店"))
+	lines.append("商人：远洋商队刚靠岸，这几样药剂最能救命。出门打怪，包里可不能缺了它们。")
+	for id: String in GameData.items:
+		var def := GameData.get_item(id)
+		if String(def.get("type", "")) != "drug":
+			continue
+		var unit := int(def.get("price", int(def.get("buy_price", 0))))
+		lines.append("▉%s 疗效+%d %d铜贝/瓶" % [esc(String(def.get("name", id))), int(def.get("heal", 0)), unit])
+		var parts: Array[String] = []
+		for tier: int in def.get("tiers", []):
+			parts.append(link("buy_drug:%s:%d" % [id, tier], "买%d瓶" % tier))
+		lines.append("　买：%s" % SEP.join(PackedStringArray(parts)))
+	lines.append("我现有：金贝:%d 铜贝:%d" % [player.gold, player.copper])
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回游戏"))
+	return join_lines(lines)
+
+
+static func shop_result(player: PlayerCore, msg: String) -> String:
+	var lines: Array[String] = []
+	lines.append(header("威尼斯商店"))
+	lines.append(esc(msg))
+	lines.append("我现有：金贝:%d 铜贝:%d" % [player.gold, player.copper])
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("shop", "返回商店"), link("back_game", "返回游戏")])
+	return join_lines(lines)
+
+
+static func smith_page(player: PlayerCore) -> String:
+	var lines: Array[String] = []
+	lines.append(header("威尼斯铁匠铺"))
+	lines.append("铁匠：炉火正旺，修修补补、打刀造剑，都是我的拿手活。")
+	var hand := player.hand_item()
+	if hand.is_empty():
+		lines.append(dim("手持：空手（去打造一把趁手的兵器吧）"))
+	else:
+		var hid := String(hand.get("id", ""))
+		var max_dur := maxi(int(GameData.get_item(hid).get("durability", 1)), 1)
+		lines.append("手持：%s 耐久 %d/%d" % [esc(player.item_name(hid)), int(hand.get("dur", 0)), max_dur])
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("repair_hand", "修理手持"), link("forge_page", "打造装备")])
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回"))
+	return join_lines(lines)
+
+
+static func smith_result(player: PlayerCore, msg: String) -> String:
+	var lines: Array[String] = []
+	lines.append(header("威尼斯铁匠铺"))
+	lines.append(esc(msg))
+	lines.append("铜贝：%d" % player.copper)
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("smith", "返回铁匠铺"), link("back_game", "返回游戏")])
+	return join_lines(lines)
+
+
+static func forge_page(player: PlayerCore) -> String:
+	var lines: Array[String] = []
+	lines.append(header("铁匠铺 · 打造"))
+	lines.append("铁匠：好铁配好手。材料给我备齐，工钱别短，装备马上出炉。")
+	var any := false
+	for id: String in GameData.items:
+		var def := GameData.get_item(id)
+		var forge: Dictionary = def.get("forge", {})
+		if String(def.get("type", "")) != "equip" or forge.is_empty():
+			continue
+		any = true
+		var atk: Array = def.get("atk", [0, 0])
+		lines.append("▉%s（%d级 攻击%d-%d 耐久%d）" % [
+			esc(String(def.get("name", id))), int(def.get("req_level", 1)),
+			int(atk[0]), int(atk[1]), int(def.get("durability", 0)),
+		])
+		var mats: Dictionary = forge.get("materials", {})
+		var mat_parts: Array[String] = []
+		for mid: String in mats:
+			mat_parts.append("%s×%d（有%d）" % [esc(player.item_name(mid)), int(mats[mid]), player.count_stack(mid)])
+		lines.append("　材料：%s  工钱：%d铜贝" % [SEP.join(PackedStringArray(mat_parts)), int(forge.get("copper", 0))])
+		if _forge_ready(player, id):
+			lines.append("　%s" % link("forge:%s" % id, "[打造]"))
+		else:
+			lines.append("　%s" % dim("（材料或工钱不足，暂不能打造）"))
+	if not any:
+		lines.append(dim("暂无可打造的装备。图纸上还缺好铁。"))
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("smith", "返回铁匠铺"), link("back_game", "返回游戏")])
+	return join_lines(lines)
+
+
+static func _forge_ready(player: PlayerCore, id: String) -> bool:
+	var forge: Dictionary = GameData.get_item(id).get("forge", {})
+	if forge.is_empty():
+		return false
+	var purse := player.copper + player.bank_silver * Rules.copper_per_silver()
+	if purse < int(forge.get("copper", 0)):
+		return false
+	var mats: Dictionary = forge.get("materials", {})
+	for mid: String in mats:
+		if player.count_stack(mid) < int(mats[mid]):
+			return false
+	return true
+
+
 # ---------- 码头 / 传送 ----------
 
 static func teleport_page(player: PlayerCore) -> String:
@@ -668,7 +825,63 @@ static func explorer_page(player: PlayerCore) -> String:
 	return join_lines(lines)
 
 
+static func dungeon_page(player: PlayerCore) -> String:
+	var scene := GameData.get_scene(Rules.dungeon_scene())
+	var lines: Array[String] = []
+	lines.append(header(String(scene.get("name", "威尼斯地宫"))))
+	lines.append(esc(String(scene.get("desc", ""))))
+	lines.append("")
+	lines.append("任务：限时内击杀 %d 个抢劫者，找秘密看守领取奖励。" % Rules.dungeon_kill_goal())
+	lines.append("击杀进度：%d/%d" % [player.dungeon_kills, Rules.dungeon_kill_goal()])
+	lines.append("剩余时间：%s" % _mmss(player.dungeon_remaining_sec()))
+	lines.append("")
+	lines.append("[center]%s   %s   %s[/center]" % [
+		link("fight:%s" % Rules.dungeon_monster(), "挑战抢劫者"),
+		link("npc:%s:keeper" % Rules.dungeon_scene(), "秘密看守"),
+		link("goto:%s" % Rules.dungeon_exit_scene(), "离开地宫"),
+	])
+	lines.append("")
+	lines.append(footer())
+	return join_lines(lines)
+
+
+static func dungeon_keeper_page(player: PlayerCore) -> String:
+	var lines: Array[String] = []
+	lines.append(header("秘密看守"))
+	lines.append("秘密看守：杀够 %d 个抢劫者再来找我领赏，你现在才 %d 个。" % [Rules.dungeon_kill_goal(), player.dungeon_kills])
+	lines.append("剩余时间：%s" % _mmss(player.dungeon_remaining_sec()))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("goto:%s" % Rules.dungeon_scene(), "返回地宫"))
+	return join_lines(lines)
+
+
+static func dungeon_reward_page(copper_reward: int, gold_reward: int) -> String:
+	var lines: Array[String] = []
+	lines.append(header("秘密看守"))
+	lines.append("秘密看守：干得漂亮！地宫的赏金如今是你的了，拿好，别在城门口露白。")
+	lines.append("铜贝：+%d" % copper_reward)
+	lines.append("[color=#ffd700]金贝：+%d[/color]" % gold_reward)
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("goto:%s" % Rules.dungeon_exit_scene(), "离开地宫"))
+	return join_lines(lines)
+
+
+static func dungeon_timeout_page() -> String:
+	var lines: Array[String] = []
+	lines.append(header("威尼斯地宫"))
+	lines.append("秘密看守：限时已到，地宫的规矩谁也不能破例。今天就到此为止，明天再来吧。")
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("goto:%s" % Rules.dungeon_exit_scene(), "离开地宫"))
+	return join_lines(lines)
+
+
 # ---------- 工具 ----------
+
+@warning_ignore("integer_division")
+static func _mmss(total_sec: int) -> String:
+	var s := maxi(total_sec, 0)
+	return "%02d:%02d" % [s / 60, s % 60]
+
 
 static func join_lines(lines: Array[String]) -> String:
 	var out := ""

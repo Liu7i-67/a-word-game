@@ -95,6 +95,42 @@ static func link_color() -> String:
 	return String(section("ui").get("link_color", "#66b3ff"))
 
 
-## 威尼斯地宫进入条件（探险官台词✅：5 级以上、6 人同行、每日一次——本版仅校验等级）
+## 修理价：耐久缺口 × 单点修理费（扩展契约 §3.4）
+static func repair_cost(missing: int) -> int:
+	return maxi(missing, 0) * int(section("economy").get("repair_cost_per_point", 2))
+
+
+## ---------- 威尼斯地宫（扩展契约 §4.5，数值全在 config.combat） ----------
+
+## 进入条件（探险官台词✅：5 级以上、每日一次——本版仅校验等级）
 static func dungeon_level_range() -> Vector2i:
-	return Vector2i(5, 15)
+	var c := section("combat")
+	return Vector2i(int(c.get("dungeon_level_min", 5)), int(c.get("dungeon_level_max", 15)))
+
+
+static func dungeon_scene() -> String:
+	return String(section("combat").get("dungeon_scene", "digung"))
+
+
+static func dungeon_exit_scene() -> String:
+	return String(section("combat").get("dungeon_exit_scene", "baksingmun"))
+
+
+static func dungeon_monster() -> String:
+	return String(section("combat").get("dungeon_monster", "qiang_jie_zhe"))
+
+
+static func dungeon_kill_goal() -> int:
+	return int(section("combat").get("dungeon_kill_goal", 40))
+
+
+static func dungeon_time_limit_sec() -> int:
+	return int(section("combat").get("dungeon_time_limit_sec", 3000))
+
+
+static func dungeon_reward_copper() -> int:
+	return int(section("combat").get("dungeon_reward_copper", 20000))
+
+
+static func dungeon_reward_gold() -> int:
+	return int(section("combat").get("dungeon_reward_gold", 1))

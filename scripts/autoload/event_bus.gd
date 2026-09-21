@@ -17,3 +17,6 @@ signal weapon_broken(item_name: String)
 signal leveled_up(new_level: int)
 signal item_obtained(item_id: StringName, amount: int)
 signal welfare_claimed(amount: int)
+
+## 地宫（扩展契约 §4.7）
+signal dungeon_cleared(reward_copper: int, reward_gold: int)

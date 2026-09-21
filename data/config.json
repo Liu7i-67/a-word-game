@@ -1,5 +1,5 @@
 {
-  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。",
+  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。本轮增补(扩展契约§3.4)：economy.repair_cost_per_point=铁匠修理单价；combat.dungeon_*=地宫挑战(击杀目标/时限/通关奖励)。",
   "start": {
     "scene": "zaugun",
     "level": 1,
@@ -30,7 +30,11 @@
     "death_loss_min": 1,
     "death_loss_max": 5000,
     "revive_ratio_pct": 50,
-    "revive_scene": "gaautong"
+    "revive_scene": "gaautong",
+    "dungeon_kill_goal": 40,
+    "dungeon_time_limit_sec": 3000,
+    "dungeon_reward_copper": 20000,
+    "dungeon_reward_gold": 1
   },
   "economy": {
     "copper_per_silver": 100,
@@ -39,7 +43,8 @@
     "confess_reduce": 10,
     "casino_bet": 200,
     "casino_win": 1000,
-    "sell_ratio_pct": 50
+    "sell_ratio_pct": 50,
+    "repair_cost_per_point": 2
   },
   "teleport": {
     "cost_silver": 10

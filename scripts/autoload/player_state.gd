@@ -36,6 +36,11 @@ var hand: int = -1
 var location: String = ""
 var welfare_week: int = -1
 
+## 威尼斯地宫（扩展契约 §4.5）：dungeon_day = 进入过的当日序号（-1 未进过）
+var dungeon_day: int = -1
+var dungeon_kills: int = 0
+var dungeon_deadline: int = 0
+
 
 func _ready() -> void:
 	rng.randomize()
@@ -62,6 +67,9 @@ func new_game(name_text: String, gen: String) -> void:
 	if not GameData.has_scene(location):
 		location = "zaugun"
 	welfare_week = -1
+	dungeon_day = -1
+	dungeon_kills = 0
+	dungeon_deadline = 0
 	var weapon_id := String(start.get("weapon", ""))
 	if weapon_id != "" and GameData.has_item(weapon_id):
 		var idx := add_equip(weapon_id)
@@ -87,6 +95,9 @@ func write_to(save: Dictionary) -> void:
 		"hand": hand,
 		"location": location,
 		"welfare_week": welfare_week,
+		"dungeon_day": dungeon_day,
+		"dungeon_kills": dungeon_kills,
+		"dungeon_deadline": dungeon_deadline,
 	}
 
 
@@ -121,6 +132,9 @@ func read_from(save: Dictionary) -> bool:
 	if not GameData.has_scene(location):
 		location = String(Rules.section("start").get("scene", "zaugun"))
 	welfare_week = int(p.get("welfare_week", -1))
+	dungeon_day = int(p.get("dungeon_day", -1))
+	dungeon_kills = maxi(int(p.get("dungeon_kills", 0)), 0)
+	dungeon_deadline = maxi(int(p.get("dungeon_deadline", 0)), 0)
 	hp_cur = clampi(int(p.get("hp", max_hp())), 0, max_hp())
 	_emit_all()
 	return true
@@ -361,6 +375,37 @@ func damage_hand() -> String:
 	return ""
 
 
+## 手持装备的耐久缺口（空手返回 -1，满耐久返回 0）
+func hand_missing_dur() -> int:
+	var inst := hand_item()
+	if inst.is_empty():
+		return -1
+	var def := GameData.get_item(String(inst.get("id", "")))
+	return maxi(int(def.get("durability", 1)) - int(inst.get("dur", 0)), 0)
+
+
+## 修理手持装备至满耐久（付款校验由调用方先行完成）
+func repair_hand() -> void:
+	var inst := hand_item()
+	if inst.is_empty():
+		return
+	var def := GameData.get_item(String(inst.get("id", "")))
+	inst["dur"] = int(def.get("durability", 1))
+	inventory_changed.emit()
+
+
+## 使用药品，返回 ""=成功 / "none"=没有该药 / "full"=满血（扩展契约 §4.1）
+func use_drug(id: String) -> String:
+	var def := GameData.get_item(id)
+	if def.is_empty() or String(def.get("type", "")) != "drug" or count_stack(id) <= 0:
+		return "none"
+	if hp_cur >= max_hp():
+		return "full"
+	heal(int(def.get("heal", 0)))
+	remove_stack(id, 1)
+	return ""
+
+
 # ---------- 位置 / 福利周 ----------
 
 func set_location(scene_id: String) -> void:
@@ -376,12 +421,52 @@ func current_week() -> int:
 	return int(floor(Time.get_unix_time_from_system() / 604800.0))
 
 
+## 以自然日（86400 秒）为界的当日序号（🔍：原版「每天一次」的具体日界未知）
+func current_day() -> int:
+	return int(floor(Time.get_unix_time_from_system() / 86400.0))
+
+
 func welfare_claimable() -> bool:
 	return welfare_week < current_week()
 
 
 func mark_welfare_claimed() -> void:
 	welfare_week = current_week()
+
+
+# ---------- 威尼斯地宫（扩展契约 §4.5） ----------
+
+## 申请进入地宫，返回 ""=放行 / "level"=级别不符 / "visited"=当日已进入过
+func dungeon_try_enter() -> String:
+	var range_lv := Rules.dungeon_level_range()
+	if level < range_lv.x or level > range_lv.y:
+		return "level"
+	if dungeon_day == current_day():
+		return "visited"
+	dungeon_day = current_day()
+	dungeon_kills = 0
+	dungeon_deadline = int(Time.get_unix_time_from_system()) + Rules.dungeon_time_limit_sec()
+	return ""
+
+
+func dungeon_expired() -> bool:
+	return dungeon_deadline > 0 and int(Time.get_unix_time_from_system()) >= dungeon_deadline
+
+
+func dungeon_remaining_sec() -> int:
+	if dungeon_deadline <= 0:
+		return 0
+	return maxi(dungeon_deadline - int(Time.get_unix_time_from_system()), 0)
+
+
+func dungeon_add_kill() -> void:
+	dungeon_kills += 1
+
+
+## 清空本轮进度（dungeon_day 保留，防当日重复进入）
+func dungeon_clear_progress() -> void:
+	dungeon_kills = 0
+	dungeon_deadline = 0
 
 
 func _emit_all() -> void:
