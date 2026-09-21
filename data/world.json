@@ -1,0 +1,25 @@
+{
+  "_doc": "世界港口表（贸易契约§2）。ports[i]：id=港标识（其余9港的同id场景在 scenes.json，on_map=false）；name=港名；region=所属海域（地中海/北海/非洲）；scene=该港市场场景id，venice 复用既有威尼斯市场 sicoeng；specialties=本港特产贸易品（买入享 trade.specialty_discount_pct 折扣）；demand_pool=本港热门池（每日按 day+港id 为种子从中抽 trade.hot_per_port 个为当日抢手货，单价乘 trade.hot_multiplier_pct）。specialties/demand_pool 里的物品 id 必须是 items.json 中 type=goods 的可交易贸易品。",
+  "ports": [
+    {"id": "venice", "name": "威尼斯", "region": "地中海", "scene": "sicoeng",
+     "specialties": ["putaojiu", "ganyouyou"], "demand_pool": ["sichou", "xiangliao", "xiangshui", "taoqi"]},
+    {"id": "risiben", "name": "里斯本", "region": "北海", "scene": "risiben",
+     "specialties": ["botejiu", "xianyu"], "demand_pool": ["sichou", "xiangliao", "xiangshui", "ganyouyou"]},
+    {"id": "masa", "name": "马赛", "region": "地中海", "scene": "masa",
+     "specialties": ["dalishi", "xiangshui"], "demand_pool": ["botejiu", "haiyan", "putaojiu", "taoqi"]},
+    {"id": "tunisi", "name": "突尼斯", "region": "非洲", "scene": "tunisi",
+     "specialties": ["xiangliao", "shacao"], "demand_pool": ["xianyu", "maopi", "dalishi", "ganyouyou"]},
+    {"id": "yalishanda", "name": "亚历山大", "region": "非洲", "scene": "yalishanda",
+     "specialties": ["shacao", "taoqi"], "demand_pool": ["sichou", "xiangshui", "xiangliao", "putaojiu"]},
+    {"id": "yadian", "name": "雅典", "region": "地中海", "scene": "yadian",
+     "specialties": ["taoqi", "dalishi"], "demand_pool": ["sichou", "xiangshui", "haiyan", "botejiu"]},
+    {"id": "yisitanbao", "name": "伊斯坦堡", "region": "地中海", "scene": "yisitanbao",
+     "specialties": ["sichou"], "demand_pool": ["xiangliao", "maopi", "xiangshui", "shacao"]},
+    {"id": "yisitanbuer", "name": "伊斯坦布尔", "region": "地中海", "scene": "yisitanbuer",
+     "specialties": ["maopi", "xianyu"], "demand_pool": ["sichou", "xiangliao", "haiyan", "taoqi"]},
+    {"id": "aerjier", "name": "阿尔及尔", "region": "非洲", "scene": "aerjier",
+     "specialties": ["maopi", "haiyan"], "demand_pool": ["botejiu", "taoqi", "dalishi", "putaojiu"]},
+    {"id": "laguzha", "name": "拉古扎", "region": "地中海", "scene": "laguzha",
+     "specialties": ["haiyan"], "demand_pool": ["sichou", "taoqi", "xiangshui", "xiangliao"]}
+  ]
+}

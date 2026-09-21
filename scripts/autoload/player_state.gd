@@ -384,6 +384,21 @@ func hand_missing_dur() -> int:
 	return maxi(int(def.get("durability", 1)) - int(inst.get("dur", 0)), 0)
 
 
+## 移除一件装备实例（铁匠回收等），返回被移除的实例（{}=下标非法）。
+## 手持件先自动卸下；其后手持下标前移，避免悬空索引。
+func sell_equip(idx: int) -> Dictionary:
+	if idx < 0 or idx >= equips.size():
+		return {}
+	var inst := equips[idx]
+	equips.remove_at(idx)
+	if hand == idx:
+		hand = -1
+	elif hand > idx:
+		hand -= 1
+	inventory_changed.emit()
+	return inst
+
+
 ## 修理手持装备至满耐久（付款校验由调用方先行完成）
 func repair_hand() -> void:
 	var inst := hand_item()

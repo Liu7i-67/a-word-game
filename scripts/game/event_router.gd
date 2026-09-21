@@ -93,6 +93,16 @@ func handle(event: String, param: String = "") -> void:
 			page = Pages.sell_page(player)
 		"sell":
 			_sell(arg, arg2)
+		"trade_buy":
+			_trade_buy(arg, arg2)
+		"trade_sell":
+			_trade_sell(arg, arg2)
+		"rumor":
+			_rumor()
+		"sell_equip_page":
+			page = Pages.sell_equip_page(player)
+		"sell_equip":
+			_sell_equip(int(arg))
 		"teleport":
 			page = Pages.teleport_page(player)
 		"tp":
@@ -245,6 +255,10 @@ func _npc(scene_id: String, npc_id: String) -> void:
 				page = Pages.shop_page(player)
 			"smith":
 				page = Pages.smith_page(player)
+			"trade_market":
+				page = Pages.trade_market_page(player, Trade.port_at(scene_id))
+			"tavern_rumor":
+				page = Pages.tavern_rumor_page(player, Trade.port_at(scene_id))
 			"dungeon_keeper":
 				_dungeon_keeper()
 			_:
@@ -424,13 +438,30 @@ func _rps(move: String) -> void:
 
 # ---------- 市场 ----------
 
+## 威尼斯市场成交价（契约 trade-spec §4：_buy/_sell 价源切换为 Trade 引擎，同港零差价）
+func _venice_price(item_id: String) -> int:
+	return Trade.price(item_id, Trade.VENICE, player.current_day())
+
+
+## 成交卖价（主进程裁决 trade-spec 遗留项：打怪掉落材料不是贸易品，不做跨港差价）：
+## 贸易品（world 各港 specialties/demand_pool 引用集合）→ Trade 引擎本地价；
+## 非贸易品带显式 sell_price 字段 → 固定回收价；兜底 → 买价 50%。
+func _sell_unit_price(item_id: String, port_id: String = Trade.VENICE) -> int:
+	if Trade.trade_goods().has(item_id):
+		return Trade.price(item_id, port_id, player.current_day())
+	var def := GameData.get_item(item_id)
+	if def.has("sell_price"):
+		return maxi(int(def.get("sell_price", 0)), 1)
+	return Rules.sell_price(int(def.get("buy_price", 0)))
+
+
 func _buy(item_id: String, qty_text: String) -> void:
 	var def := GameData.get_item(item_id)
 	var qty := int(qty_text)
 	if def.is_empty() or qty <= 0:
 		page = Pages.market_main(player)
 		return
-	var cost := int(def.get("buy_price", 0)) * qty
+	var cost := _venice_price(item_id) * qty
 	var per_weight := int(def.get("weight", 0))
 	if per_weight > 0 and player.weight() + per_weight * qty > player.weight_cap():
 		page = Pages.market_result(player, "供应商：这么多货你背不动，少买点吧。")
@@ -457,7 +488,7 @@ func _sell(item_id: String, qty_text: String) -> void:
 	if not player.remove_stack(item_id, qty):
 		page = Pages.market_result(player, "供应商：你哪来那么多货？")
 		return
-	var earn := Rules.sell_price(int(def.get("buy_price", 0))) * qty
+	var earn := _sell_unit_price(item_id) * qty
 	player.add_copper(earn)
 	page = Pages.market_result(player, "你卖掉了 %d 箱%s，进账 %d 铜贝。" % [qty, player.item_name(item_id), earn])
 	needs_save = true
@@ -465,6 +496,83 @@ func _sell(item_id: String, qty_text: String) -> void:
 
 func count_sell_qty(item_id: String, qty_text: String) -> int:
 	return player.count_stack(item_id) if qty_text == "all" else int(qty_text)
+
+
+# ---------- 港口贸易 / 酒保情报（契约 trade-spec §4-§5） ----------
+
+## 玩家当前所在港口 id（world 数据缺失时返回 ""）
+func _trade_port() -> String:
+	return Trade.port_at(player.location)
+
+
+func _trade_buy(good_id: String, qty_text: String) -> void:
+	var port_id := _trade_port()
+	var qty := int(qty_text)
+	var def := GameData.get_item(good_id)
+	if port_id == "" or String(def.get("type", "")) != "goods" or qty <= 0:
+		page = Pages.trade_market_page(player, port_id)
+		return
+	var cost := Trade.price(good_id, port_id, player.current_day()) * qty
+	var per_weight := int(def.get("weight", 0))
+	if per_weight > 0 and player.weight() + per_weight * qty > player.weight_cap():
+		page = Pages.trade_market_page(player, port_id, "商人：这么多货你背不动，少进点吧。")
+		return
+	if not player.spend_copper(cost):
+		page = Pages.trade_market_page(player, port_id, "商人：钱不够啊，先去银行折兑了再来，行情可不等人。")
+		return
+	if not player.add_stack(good_id, qty):
+		player.add_copper(cost)
+		page = Pages.trade_market_page(player, port_id, "商人：你身上放不下了，先出手一些再来。")
+		return
+	page = Pages.trade_market_page(player, port_id, "你买下了 %d 箱%s，花费 %d 铜贝。" % [qty, player.item_name(good_id), cost])
+	needs_save = true
+	if bus != null:
+		bus.item_obtained.emit(StringName(good_id), qty)
+
+
+func _trade_sell(good_id: String, qty_text: String) -> void:
+	var port_id := _trade_port()
+	var qty := count_sell_qty(good_id, qty_text)
+	var def := GameData.get_item(good_id)
+	if port_id == "" or String(def.get("type", "")) != "goods" or qty <= 0:
+		page = Pages.trade_market_page(player, port_id)
+		return
+	if not player.remove_stack(good_id, qty):
+		page = Pages.trade_market_page(player, port_id, "商人：你哪来那么多货？")
+		return
+	var earn := _sell_unit_price(good_id, port_id) * qty
+	player.add_copper(earn)
+	page = Pages.trade_market_page(player, port_id, "你卖掉了 %d 箱%s，进账 %d 铜贝。" % [qty, player.item_name(good_id), earn])
+	needs_save = true
+
+
+## 酒保打听：扣费 → 从当日全部港口热门集合挑 2 条（排除当前港），情报必真
+func _rumor() -> void:
+	var port_id := _trade_port()
+	var cost := Rules.rumor_cost()
+	if not player.spend_copper(cost):
+		page = Pages.tavern_rumor_page(player, port_id, "酒保：铜板都不掏一枚，还想听我的消息？")
+		return
+	needs_save = true
+	var pool := Trade.rumor_pool(player.current_day(), port_id)
+	if pool.is_empty():
+		page = Pages.tavern_rumor_result(player, ["酒保（压低声音）：最近海上风平浪静，各港都没什么抢手货，攒着铜板吧。"])
+		return
+	var first_idx := player.rng.randi() % pool.size()
+	var second_idx := first_idx
+	if pool.size() > 1:
+		second_idx = (first_idx + 1 + player.rng.randi() % (pool.size() - 1)) % pool.size()
+	var lines: Array[String] = [_rumor_line(pool[first_idx])]
+	if second_idx != first_idx:
+		lines.append(_rumor_line(pool[second_idx]))
+	page = Pages.tavern_rumor_result(player, lines)
+
+
+func _rumor_line(entry: Dictionary) -> String:
+	return "酒保（压低声音）：【%s】在【%s】最近很抢手，去晚了可就赶不上了……" % [
+		player.item_name(String(entry.get("good", ""))),
+		Trade.port_name(String(entry.get("port", ""))),
+	]
 
 
 # ---------- 商店 / 药品（扩展契约 §4.1、§4.3） ----------
@@ -620,13 +728,38 @@ func _combat_use(drug_id: String) -> void:
 
 # ---------- 码头 / 传送 ----------
 
+## 传送出海（契约 trade-spec §6）：world 就位后真实扣费跨港；缺失沿用原占位文案
 func _tp(arg: String) -> void:
 	var idx := int(arg)
-	if idx < 0 or idx >= GameData.ports.size():
+	if GameData.world_ports.is_empty():
+		if idx < 0 or idx >= GameData.ports.size():
+			page = Pages.teleport_page(player)
+			return
+		# 原版除威尼斯外所有港口均未实现：占位文案逐字保留
+		page = Pages.notice_page("%s：暂未开发区域，请耐心等待" % GameData.ports[idx], "teleport", "返回码头")
+		return
+	if idx < 0 or idx >= GameData.world_ports.size():
 		page = Pages.teleport_page(player)
 		return
-	# 原版除威尼斯外所有港口均未实现：占位文案逐字保留
-	page = Pages.notice_page("%s：暂未开发区域，请耐心等待" % GameData.ports[idx], "teleport", "返回码头")
+	var port: Dictionary = GameData.world_ports[idx]
+	var port_id := String(port.get("id", ""))
+	var scene_id := String(port.get("scene", port_id))
+	if not GameData.has_scene(scene_id):
+		# world 已列港但场景尚未实装：保持占位，不扣费
+		page = Pages.notice_page("%s：暂未开发区域，请耐心等待" % String(port.get("name", port_id)), "teleport", "返回码头")
+		return
+	if Trade.port_at(player.location) == port_id:
+		page = Pages.notice_page("船老板：你就站在%s的地界上，坐什么船？先去别处发财吧。" % String(port.get("name", port_id)), "teleport", "返回传送")
+		return
+	var cost := Rules.teleport_cost_copper()
+	if not player.spend_copper(cost):
+		page = Pages.notice_page("船老板：就带这几个铜子儿也想跨海？船票 %d 铜贝，去银行折兑了再来。" % cost, "teleport", "返回传送")
+		return
+	player.set_location(scene_id)
+	page = Pages.tp_arrival_page(String(port.get("name", port_id)), cost)
+	needs_save = true
+	if bus != null:
+		bus.scene_entered.emit(StringName(scene_id))
 
 
 # ---------- 装备 ----------
@@ -648,4 +781,17 @@ func _equip_use(idx: int) -> void:
 func _equip_off(idx: int) -> void:
 	player.unequip_hand()
 	page = Pages.equip_detail(player, idx)
+	needs_save = true
+
+
+## 铁匠回收装备（契约 trade-spec §7）：手持先自动卸下，按基准价 40% 入账
+func _sell_equip(idx: int) -> void:
+	var inst := player.sell_equip(idx)
+	if inst.is_empty():
+		page = Pages.sell_equip_page(player)
+		return
+	var id := String(inst.get("id", ""))
+	var earn := Rules.equip_sell_price(int(GameData.get_item(id).get("price", 0)))
+	player.add_copper(earn)
+	page = Pages.smith_result(player, "铁匠：成，「%s」回炉我收了，%d 铜贝拿好，别弄丢了。" % [player.item_name(id), earn])
 	needs_save = true

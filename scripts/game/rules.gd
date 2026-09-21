@@ -87,6 +87,26 @@ static func teleport_cost_silver() -> int:
 	return int(section("teleport").get("cost_silver", 10))
 
 
+## 传送实际扣费（契约 trade-spec §6：文案仍写「10银」，扣款走 cost_copper 自动折兑）
+static func teleport_cost_copper() -> int:
+	return int(section("teleport").get("cost_copper", 1000))
+
+
+## 酒保打听价（契约 trade-spec §5）
+static func rumor_cost() -> int:
+	return int(section("economy").get("rumor_cost", 20))
+
+
+## 装备回收比例 pct（契约 trade-spec §7，默认 40%）
+static func equip_sell_ratio_pct() -> int:
+	return int(section("economy").get("equip_sell_ratio_pct", 40))
+
+
+## 装备回收价 = round(基准价值 × 回收比例)
+static func equip_sell_price(base_price: int) -> int:
+	return int(round(float(maxi(base_price, 0)) * float(equip_sell_ratio_pct()) / 100.0))
+
+
 static func click_cooldown_ms() -> int:
 	return int(section("ui").get("click_cooldown_ms", 250))
 

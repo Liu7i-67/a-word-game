@@ -29,8 +29,13 @@ func _process(_delta: float) -> bool:
 	_test_combat_drug(player)
 	_test_smith(player)
 	_test_dungeon(player)
+	_test_trade_engine()
+	_test_trade_router(player)
+	_test_sell_equip(player)
 	_test_drop_equip(player)
 	_test_title_click_path(player)
+	_test_scroll_fix(player)
+	_test_safe_area_frame()
 	_test_player_roundtrip(player)
 	_test_save_manager()
 	if fails.is_empty():
@@ -60,7 +65,7 @@ func _test_data() -> void:
 	check(GameData.scenes_by_id.size() >= 25, "场景数应 ≥25（原版 25 + 城外扩展），实际 %d" % GameData.scenes_by_id.size())
 	check(GameData.ports.size() == 10, "传送港口应为 10 个")
 
-	var npc_kinds := ["flavor", "welfare", "church", "bank", "casino", "market", "teleport", "sail", "dungeon", "shop", "smith", "dungeon_keeper"]
+	var npc_kinds := ["flavor", "welfare", "church", "bank", "casino", "market", "teleport", "sail", "dungeon", "shop", "smith", "dungeon_keeper", "trade_market", "tavern_rumor"]
 	for id in GameData.scene_order:
 		var scene: Dictionary = GameData.scenes_by_id[id]
 		check(String(scene.get("name", "")) != "", "场景 %s 缺 name" % id)
@@ -328,11 +333,13 @@ func _test_router(player: PlayerCore) -> void:
 	router.handle("again")
 	check(router.page.contains("服务费10%"), "再来一次回赌场主页面")
 
-	# 市场
+	# 市场（威尼斯既有市场：价源已切 Trade 引擎，同港零差价；断言按引擎现价动态计算）
 	router.handle("goto:sicoeng")
 	router.handle("npc:sicoeng:vendor")
 	check(router.page.contains("本地特产"), "供应商对白")
-	check(router.page.contains("26铜贝/箱"), "葡萄酒价格（文档✅）")
+	var trade_day := player.current_day()
+	var wine := Trade.price("putaojiu", Trade.VENICE, trade_day)
+	check(router.page.contains("%d铜贝/箱" % wine), "葡萄酒本地价（Trade 引擎定价）")
 	player.add_copper(50000)
 	var g0 := player.count_stack("putaojiu")
 	router.handle("buy:putaojiu:225")
@@ -341,7 +348,14 @@ func _test_router(player: PlayerCore) -> void:
 	var g1 := player.count_stack("putaojiu")
 	router.handle("sell:putaojiu:all")
 	check(player.count_stack("putaojiu") == 0, "全部卖出")
-	check(player.copper == cu0 + g1 * 13, "卖价 13 铜贝/箱")
+	check(player.copper == cu0 + g1 * wine, "卖价=引擎现价（同港零差价）")
+
+	# 非贸易材料固定回收价（sell_price 字段），不被 Trade 引擎按基准价翻倍
+	player.add_stack("emao", 10)
+	var cm := player.copper
+	router.handle("sell:emao:all")
+	check(player.count_stack("emao") == 0, "材料全部卖出")
+	check(player.copper == cm + 60, "材料回收价=sell_price(6×10)")
 
 	# 物品 / 装备
 	router.handle("items:equip")
@@ -360,8 +374,17 @@ func _test_router(player: PlayerCore) -> void:
 	router.handle("goto:maatau")
 	router.handle("npc:maatau:teleporter")
 	check(router.page.contains("地中海"), "传送页")
-	router.handle("tp:1")
-	check(router.page.contains("暂未开发区域"), "未开放港口占位（原文案）")
+	if GameData.world_ports.is_empty():
+		router.handle("tp:1")
+		check(router.page.contains("暂未开发区域"), "未开放港口占位（原文案）")
+	else:
+		# world 就位：tp 真实出海（契约 trade-spec §6），验完回威尼斯继续旧链路
+		var wallet0 := player.copper + player.bank_silver * Rules.copper_per_silver()
+		router.handle("tp:1")
+		check(player.location == String(GameData.world_ports[1].get("scene", "")), "tp 到达目标港场景")
+		check(router.page.contains("船票花去"), "船票提示页")
+		check(player.copper + player.bank_silver * Rules.copper_per_silver() == wallet0 - Rules.teleport_cost_copper(), "tp 扣费 1000 铜贝")
+		router.handle("goto:maatau")
 	router.handle("npc:maatau:sailor")
 	check(router.page.contains("暂未开发区域"), "出航占位（原文案）")
 	router.handle("goto:baksingmun")
@@ -661,6 +684,262 @@ func _test_drop_equip(player: PlayerCore) -> void:
 	de["rate"] = old_rate
 
 
+# ---------- 5.9 航海贸易引擎（契约 docs/trade-spec.md §3） ----------
+
+func _test_trade_engine() -> void:
+	if not Trade.trade_data_ready():
+		print("SKIP: 贸易引擎用例缺少 world.json / 12 贸易品数据")
+		return
+	var day := 20666
+	# 同日确定型：同 day 同港热门恒定，每港抽 2 个
+	for pid: String in ["venice", "risiben", "laguzha"]:
+		var hot := Trade.hot_goods(pid, day)
+		check(Trade.hot_goods(pid, day) == hot, "同 day 同港热门恒定 %s" % pid)
+		check(hot.size() == 2, "每港抽 2 个热门 %s" % pid)
+	# 不同 day 热门集合会变化（确定型，近 60 日必有一变）
+	var changed := false
+	for off in range(1, 61):
+		if Trade.hot_goods("risiben", day + off) != Trade.hot_goods("risiben", day):
+			changed = true
+			break
+	check(changed, "不同 day 热门集合会变化")
+	# 公式抽查：非热门非产地=基准、产地×0.85、热门×1.8
+	var checked_hot := false
+	var checked_plain := false
+	var checked_origin := false
+	for port: Dictionary in GameData.world_ports:
+		var pid := String(port.get("id", ""))
+		var specialties: Array = port.get("specialties", [])
+		for gid: String in Trade.hot_goods(pid, day):
+			var base_hot := int(GameData.get_item(gid).get("buy_price", 0))
+			check(Trade.price(gid, pid, day) == int(round(float(base_hot) * 1.8)), "热门定价=基准×1.8 %s@%s" % [gid, pid])
+			checked_hot = true
+		for gid: String in Trade.trade_goods():
+			if Trade.is_hot(gid, pid, day):
+				continue
+			var base := int(GameData.get_item(gid).get("buy_price", 0))
+			if specialties.has(gid):
+				check(Trade.price(gid, pid, day) == int(round(float(base) * 0.85)), "产地定价=基准×0.85 %s@%s" % [gid, pid])
+				checked_origin = true
+			else:
+				check(Trade.price(gid, pid, day) == base, "普通定价=基准 %s@%s" % [gid, pid])
+				checked_plain = true
+	check(checked_hot and checked_plain and checked_origin, "定价公式抽查覆盖热门/普通/产地")
+	# 叠加抽查：临时把 venice 自家 specialty 塞进 demand_pool（测后还原）
+	var venice := Trade.port_def(Trade.VENICE)
+	var saved_pool: Array = (venice.get("demand_pool", []) as Array).duplicate()
+	venice["demand_pool"] = ["putaojiu"]
+	check(Trade.is_hot("putaojiu", Trade.VENICE, day), "临时池：putaojiu 当日热门")
+	check(Trade.price("putaojiu", Trade.VENICE, day) == int(round(26.0 * 0.85 * 1.8)), "产地+热门叠加 ≈×1.53")
+	venice["demand_pool"] = saved_pool
+	check(not Trade.is_hot("putaojiu", Trade.VENICE, day), "还原 demand_pool 后不再热门")
+	# 情报池：排除当前港且非空
+	var pool := Trade.rumor_pool(day, Trade.VENICE)
+	var pool_clean := not pool.is_empty()
+	for entry: Dictionary in pool:
+		if String(entry.get("port", "")) == Trade.VENICE:
+			pool_clean = false
+	check(pool_clean, "情报池排除当前港且非空")
+
+
+# ---------- 5.10 航海贸易链路（契约 §4-§6：跨港买卖/情报真实性/tp 扣费） ----------
+
+func _test_trade_router(player: PlayerCore) -> void:
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("贸易商", "♂")
+	player.add_copper(999999)
+	if not Trade.trade_data_ready() or not _port_npcs_ready():
+		print("SKIP: 贸易链路用例缺少 world/港口场景数据")
+		return
+	var day := player.current_day()
+	var plan := _find_arbitrage(day)
+	if plan.is_empty():
+		print("SKIP: 贸易链路用例当日无产地/热门跨港组合")
+		return
+	var good := String(plan.get("good", ""))
+	var origin := String(plan.get("origin", ""))
+	var dest := String(plan.get("dest", ""))
+	var wallet := player.copper + player.bank_silver * Rules.copper_per_silver()
+
+	# tp 去产地港（页面写 10 银，实扣 cost_copper=1000 铜贝，银行自动折兑）
+	router.handle("tp:%d" % _port_index(origin))
+	check(player.location == Trade.port_scene(origin), "tp 到达产地港")
+	wallet -= Rules.teleport_cost_copper()
+	check(player.copper + player.bank_silver * Rules.copper_per_silver() == wallet, "tp 实扣 teleport.cost_copper")
+	# 港口市场页：region / 随身铜贝 / 🔥抢手 / 买卖档位
+	router.handle("npc:%s:merchant" % Trade.port_scene(origin))
+	check(router.page.contains(String(Trade.port_def(origin).get("region", ""))), "市场页显示 region")
+	check(router.page.contains("随身铜贝"), "市场页显示随身铜贝")
+	check(router.page.contains("🔥抢手"), "市场页含🔥抢手标记")
+	check(router.page.contains("trade_buy:%s:" % good), "市场页买入档位")
+	check(router.page.contains("trade_sell:%s:all" % good), "市场页全部卖出档位")
+	# 产地买入
+	var buy_unit := Trade.price(good, origin, day)
+	var qty := 10
+	router.handle("trade_buy:%s:%d" % [good, qty])
+	check(player.count_stack(good) == qty, "产地买入 %d 箱入包" % qty)
+	wallet -= buy_unit * qty
+	check(player.copper + player.bank_silver * Rules.copper_per_silver() == wallet, "买入扣款=产地价×数量")
+	# 港口传送页（当前所在标记）→ tp 去热门港
+	router.handle("npc:%s:teleporter" % Trade.port_scene(origin))
+	check(router.page.contains("当前所在"), "传送页标当前所在")
+	router.handle("tp:%d" % _port_index(dest))
+	check(player.location == Trade.port_scene(dest), "tp 到达热门港")
+	wallet -= Rules.teleport_cost_copper()
+	# 酒保情报：扣费 + 必真 + 排除当前港
+	router.handle("npc:%s:barkeep" % Trade.port_scene(dest))
+	check(router.page.contains("打听小道消息"), "酒保情报页 rumor 链接")
+	var purse := player.copper
+	router.handle("rumor")
+	check(player.copper == purse - Rules.rumor_cost(), "情报扣费 rumor_cost")
+	check(_page_rumors_true(router.page, day, dest), "情报必真且排除当前港")
+	wallet -= Rules.rumor_cost()
+	# 热门港卖出赚差价
+	var sell_unit := Trade.price(good, dest, day)
+	check(sell_unit > buy_unit, "产地价 < 热门港价（跨港利润）")
+	router.handle("trade_sell:%s:%d" % [good, qty])
+	check(player.count_stack(good) == 0, "热门港卖出清仓")
+	wallet += sell_unit * qty
+	check(player.copper + player.bank_silver * Rules.copper_per_silver() == wallet, "链路终钱包对账")
+	# tp 钱不够：船老板语气提示，位置不变
+	player.bank_withdraw(player.bank_silver)
+	player.take_copper(player.copper)
+	var loc0 := player.location
+	router.handle("tp:0")
+	check(player.location == loc0, "钱不够不移动")
+	check(router.page.contains("船老板"), "钱不够给船老板语气提示")
+
+
+func _port_npcs_ready() -> bool:
+	for p: Dictionary in GameData.world_ports:
+		var pid := String(p.get("id", ""))
+		if pid == Trade.VENICE:
+			continue
+		var scene := GameData.get_scene(Trade.port_scene(pid))
+		if scene.is_empty():
+			return false
+		var ids: Array[String] = []
+		for npc: Dictionary in scene.get("npcs", []):
+			ids.append(String(npc.get("id", "")))
+		if not (ids.has("merchant") and ids.has("barkeep") and ids.has("teleporter")):
+			return false
+	return true
+
+
+## 找一条当日「产地买入 → 异港热门卖出」路径（每港 2 热门，热门品必为他港特产）。
+## 威尼斯走既有市场（无 barkeep/merchant），产地与目的地只取 9 个新港口。
+func _find_arbitrage(day: int) -> Dictionary:
+	for port: Dictionary in GameData.world_ports:
+		var pid := String(port.get("id", ""))
+		if pid == Trade.VENICE:
+			continue
+		for gid: String in Trade.hot_goods(pid, day):
+			for other: Dictionary in GameData.world_ports:
+				var oid := String(other.get("id", ""))
+				if oid != Trade.VENICE and oid != pid and (other.get("specialties", []) as Array).has(gid):
+					return {"good": gid, "origin": oid, "dest": pid}
+	return {}
+
+
+func _port_index(port_id: String) -> int:
+	for i in GameData.world_ports.size():
+		if String(GameData.world_ports[i].get("id", "")) == port_id:
+			return i
+	return -1
+
+
+## 解析情报页「【货】在【港】」，逐条校验当日 is_hot 且不报当前港。
+## 注意 split("【") 会吞掉分隔符：货名块以「】在」结尾，港名是下一块开头。
+func _page_rumors_true(text: String, day: int, current_port: String) -> bool:
+	var chunks := text.split("【")
+	var found := 0
+	for i in chunks.size():
+		var chunk := String(chunks[i])
+		if chunk.substr(chunk.find("】") + 1) != "在" or i + 1 >= chunks.size():
+			continue
+		var gid := _good_id_by_name(chunk.get_slice("】", 0))
+		var pid := _port_id_by_name(String(chunks[i + 1]).get_slice("】", 0))
+		if gid == "" or pid == "" or pid == current_port or not Trade.is_hot(gid, pid, day):
+			return false
+		found += 1
+	return found > 0
+
+
+func _good_id_by_name(display_name: String) -> String:
+	for gid in Trade.GOODS:
+		if String(GameData.get_item(String(gid)).get("name", "")) == display_name:
+			return String(gid)
+	return ""
+
+
+func _port_id_by_name(display_name: String) -> String:
+	for p: Dictionary in GameData.world_ports:
+		if String(p.get("name", "")) == display_name:
+			return String(p.get("id", ""))
+	return ""
+
+
+# ---------- 5.11 装备回收（契约 trade-spec §7） ----------
+
+func _test_sell_equip(player: PlayerCore) -> void:
+	for probe: Array in [["hualiwandao1", 800], ["dahuandao", 12000], ["xiaojinsiteng", 150]]:
+		var eq_id := String(probe[0])
+		if not GameData.has_item(eq_id) or int(GameData.get_item(eq_id).get("price", -1)) != int(probe[1]):
+			print("SKIP: 装备回收用例缺少装备 price 字段")
+			return
+	var router := EventRouter.new()
+	router.setup(player, null)
+	player.new_game("收荒匠", "♂")
+	check(Rules.equip_sell_price(800) == 320, "回收价=round(基准×40%)")
+	# 铁匠页入口 + 回收页列表
+	router.handle("goto:titzoengpou")
+	router.handle("npc:titzoengpou:smith")
+	check(router.page.contains("出售装备"), "铁匠页出售装备入口")
+	router.handle("sell_equip_page")
+	check(router.page.contains("回收320铜贝"), "回收页列出弯刀回收价 320")
+	# 手持装备回收：先自动卸下
+	router.handle("sell_equip:0")
+	check(player.copper == 320, "手持弯刀回收入账 320")
+	check(player.equips.is_empty() and player.hand == -1, "手持卖出自动卸下")
+	check(router.page.contains("回炉"), "回收提示页")
+	# 卖出低下标装备：手持下标前移
+	var i1 := player.add_equip("dahuandao")
+	var i2 := player.add_equip("xiaojinsiteng")
+	check(i1 == 0 and i2 == 1, "两件装备入包")
+	check(player.equip_hand(i2) == "", "手持小金丝藤")
+	router.handle("sell_equip:0")
+	check(player.equips.size() == 1 and player.hand == 0, "卖出低下标后手持下标前移")
+	check(player.copper == 320 + Rules.equip_sell_price(12000), "大环刀回收 4800")
+	# 非法下标安全兜底
+	router.handle("sell_equip:9")
+	check(router.page.contains("出售装备") and player.equips.size() == 1, "非法下标回回收页")
+	router.handle("sell_equip:0")
+	check(player.equips.is_empty(), "清空装备")
+	check(player.copper == 320 + 4800 + Rules.equip_sell_price(150), "小金丝藤回收 60")
+
+
+# ---------- 5.12 滚动配置断言（契约 trade-spec §8） ----------
+
+func _test_scroll_fix(player: PlayerCore) -> void:
+	var view := PageView.new()
+	check(view.mouse_filter == Control.MOUSE_FILTER_PASS, "PageView mouse_filter=PASS（触摸滚动修复 §8）")
+	view.free()
+	var router := EventRouter.new()
+	router.setup(player, null)
+	var title := TitleScreen.new(router)
+	root.add_child(title)
+	check(title._scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "标题屏 ScrollContainer SHOW_NEVER（§8）")
+	title.queue_free()
+	# GameScreen 引用 SaveManager（autoload 在 -s 模式下不可静态解析），运行时动态加载
+	var gs_script: GDScript = load("res://scripts/ui/game_screen.gd")
+	var game: Control = gs_script.new(router, player)
+	root.add_child(game)
+	var scroll: ScrollContainer = game.get("_scroll")
+	check(scroll != null and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "游戏屏 ScrollContainer SHOW_NEVER（§8）")
+	game.queue_free()
+
+
 # ---------- 5.9 标题屏真实点击路径（回归：创建页必须有可见输入框） ----------
 
 func _test_title_click_path(player: PlayerCore) -> void:
@@ -675,6 +954,39 @@ func _test_title_click_path(player: PlayerCore) -> void:
 	check(ts._input_row.get_index() == 0, "输入框位于页面区上方（防窗口过矮/键盘遮挡）")
 	check(ts._name_edit.editable, "输入框可编辑")
 	ts.queue_free()
+
+
+# ---------- 5.10 安全区适配（SafeAreaFrame） ----------
+
+func _test_safe_area_frame() -> void:
+	# 正常收窄：安全区四边各内收（720×1280 内容，安全区 10/90/10/48）
+	var ins := SafeAreaFrame.compute_insets(Vector2(720, 1280), Rect2(10, 90, 700, 1142))
+	check(ins == Vector4(10, 90, 10, 48), "compute_insets 正常收窄")
+	# 安全区大于内容：四边全部钳零
+	var big := SafeAreaFrame.compute_insets(Vector2(720, 1280), Rect2(-100, -100, 1000, 1600))
+	check(big == Vector4.ZERO, "compute_insets 安全区大于内容钳零")
+	# 负值一律钳零（安全区越出内容四边）
+	var neg := SafeAreaFrame.compute_insets(Vector2(720, 1280), Rect2(-10, -90, 760, 1400))
+	check(neg == Vector4.ZERO, "compute_insets 负值钳零")
+	# 四边混合：左越界钳零、上收 90、右贴合 0、下收 90
+	var mix := SafeAreaFrame.compute_insets(Vector2(720, 1280), Rect2(-10, 90, 730, 1100))
+	check(mix == Vector4(0, 90, 0, 90), "compute_insets 四边混合")
+	# 零尺寸内容兜底
+	check(SafeAreaFrame.compute_insets(Vector2.ZERO, Rect2(0, 0, 10, 10)) == Vector4.ZERO,
+		"compute_insets 零尺寸内容兜底")
+	# --sim-insets 解析：命中与未命中
+	var sim := SafeAreaFrame.parse_sim_insets(PackedStringArray(["--shot-tour", "--sim-insets=0,90,0,48"]))
+	check(sim == Vector4(0, 90, 0, 48), "parse_sim_insets 正常解析")
+	check(SafeAreaFrame.parse_sim_insets(PackedStringArray(["--shot-tour"])).x < 0.0,
+		"parse_sim_insets 无参数返回哨兵")
+	# 实例路径：注入模拟 insets 后即时应用到四边 margin
+	var frame := SafeAreaFrame.new()
+	root.add_child(frame)
+	frame.set_simulated_insets(Vector4(5, 6, 7, 8))
+	check(frame.get_theme_constant("margin_left") == 5 and frame.get_theme_constant("margin_top") == 6
+		and frame.get_theme_constant("margin_right") == 7 and frame.get_theme_constant("margin_bottom") == 8,
+		"SafeAreaFrame 实例应用模拟 insets")
+	frame.queue_free()
 
 
 # ---------- 6. 存档往返 ----------

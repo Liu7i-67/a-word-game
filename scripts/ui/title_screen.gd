@@ -8,6 +8,7 @@ var _view: PageView
 var _scroll: ScrollContainer
 var _input_row: HBoxContainer
 var _name_edit: LineEdit
+var _safe_frame: SafeAreaFrame
 
 
 func _init(router: EventRouter) -> void:
@@ -22,13 +23,19 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
+	# 安全区框占满全屏：顶部输入行等内容随它的 insets 避开刘海/挖孔与导航条，
+	# 设计边距仍保留在原 margin 上（桌面无刘海时 insets=0，布局零变化）
+	_safe_frame = SafeAreaFrame.new()
+	_safe_frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_safe_frame)
+
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 36)
 	margin.add_theme_constant_override("margin_right", 36)
 	margin.add_theme_constant_override("margin_top", 52)
 	margin.add_theme_constant_override("margin_bottom", 40)
-	add_child(margin)
+	_safe_frame.add_child(margin)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 20)
@@ -55,6 +62,8 @@ func _build_ui() -> void:
 	_scroll = ScrollContainer.new()
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	# 触摸滚动修复点（契约 docs/trade-spec.md §8）：隐藏滚动条但保留触摸拖动滚动
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	vbox.add_child(_scroll)
 
 	_view = PageView.new()

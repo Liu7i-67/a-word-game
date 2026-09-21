@@ -43,6 +43,15 @@ func run(main: Control) -> void:
 	title._name_edit.text = "马可波罗"
 	await _shot("04_create")
 
+	# 模拟异形屏走查：user args 带 --sim-insets=左,上,右,下 时补拍 35/36，
+	# 用代码注入模拟 insets（免重启进程）；无该参数则跳过
+	var sim_insets := SafeAreaFrame.parse_sim_insets(OS.get_cmdline_user_args())
+	var sim_active := sim_insets.x >= 0.0
+	if sim_active:
+		title._safe_frame.set_simulated_insets(sim_insets)
+		await _shot("35_insets_title")
+		title._safe_frame.set_simulated_insets(SafeAreaFrame.NO_INSETS)
+
 	# 建号 → 游戏屏
 	_drive(title, "create:♂")
 	await _wait(10)
@@ -153,6 +162,33 @@ func run(main: Control) -> void:
 	await _shot("34_combat_drug")
 	_play(game, "combat_back")
 	_play(game, "retreat")
+
+	# 游戏场景页的模拟异形屏走查（与 35 同参数）
+	if sim_active:
+		game._safe_frame.set_simulated_insets(sim_insets)
+		await _shot("36_insets_game")
+		game._safe_frame.set_simulated_insets(SafeAreaFrame.NO_INSETS)
+
+	# 航海贸易走查（契约 docs/trade-spec.md §9）：world 数据就位时补拍
+	# 37 港口市场页（含🔥抢手）/ 38 酒保情报页 / 39 传送页；缺失则跳过（联调补拍）
+	if GameData.world_ports.size() >= 2 and GameData.has_scene(String(GameData.world_ports[1].get("scene", ""))):
+		router.player.add_copper(500000)
+		var pscene := String(GameData.world_ports[1].get("scene", ""))
+		_play(game, "tp:1")
+		_play(game, "npc:%s:merchant" % pscene)
+		await _shot("37_trade_market")
+		_play(game, "npc:%s:barkeep" % pscene)
+		_play(game, "rumor")
+		await _shot("38_rumor")
+		_play(game, "npc:%s:teleporter" % pscene)
+		await _shot("39_teleport")
+	else:
+		_log("TOUR SKIP: world 数据未就位，跳过 37-39 航海贸易截图")
+	# 40 装备回收页（铁匠，任何数据状态都可拍）
+	_play(game, "goto:titzoengpou")
+	_play(game, "npc:titzoengpou:smith")
+	_play(game, "sell_equip_page")
+	await _shot("40_sell_equip")
 
 	print("SHOT TOUR DONE -> ", _dir)
 	main.get_tree().quit(0)

@@ -626,6 +626,7 @@ static func rps_result(player: PlayerCore, my_move: String, mm_move: String, out
 # ---------- 市场 ----------
 
 static func market_main(player: PlayerCore) -> String:
+	var day := player.current_day()
 	var lines: Array[String] = []
 	lines.append(header("威尼斯市场"))
 	lines.append("供应商：我这卖的都是本地特产，实在便宜。")
@@ -633,7 +634,9 @@ static func market_main(player: PlayerCore) -> String:
 		var def := GameData.get_item(id)
 		if String(def.get("type", "")) != "goods":
 			continue
-		lines.append("▉%s %d铜贝/箱" % [esc(String(def.get("name", id))), int(def.get("buy_price", 0))])
+		# 契约 trade-spec §4：威尼斯市场价切换为 Trade 引擎（产地 0.85 折，卖价=买价）
+		var unit := Trade.price(id, Trade.VENICE, day)
+		lines.append("▉%s %d铜贝/箱" % [esc(String(def.get("name", id))), unit])
 		var parts: Array[String] = []
 		for tier: int in def.get("tiers", []):
 			parts.append(link("buy:%s:%d" % [id, tier], "%d箱" % tier))
@@ -655,6 +658,7 @@ static func market_result(player: PlayerCore, msg: String) -> String:
 
 
 static func sell_page(player: PlayerCore) -> String:
+	var day := player.current_day()
 	var lines: Array[String] = []
 	lines.append(header("威尼斯市场 · 卖货"))
 	var any := false
@@ -664,7 +668,9 @@ static func sell_page(player: PlayerCore) -> String:
 			continue
 		any = true
 		var count := int(player.bag[id])
-		lines.append("▉%s ×%d（%d铜贝/箱）" % [esc(String(def.get("name", id))), count, int(def.get("sell_price", 0))])
+		# 与 _sell 同源：Trade 引擎价（同港零差价）
+		var unit := Trade.price(id, Trade.VENICE, day)
+		lines.append("▉%s ×%d（%d铜贝/箱）" % [esc(String(def.get("name", id))), count, unit])
 		var parts: Array[String] = []
 		for tier: int in def.get("tiers", []):
 			if tier <= count:
@@ -723,6 +729,8 @@ static func smith_page(player: PlayerCore) -> String:
 		lines.append("手持：%s 耐久 %d/%d" % [esc(player.item_name(hid)), int(hand.get("dur", 0)), max_dur])
 	lines.append("")
 	lines.append("[center]%s   %s[/center]" % [link("repair_hand", "修理手持"), link("forge_page", "打造装备")])
+	# 契约 trade-spec §7：多余装备回炉回收入口
+	lines.append("[center]%s[/center]" % link("sell_equip_page", "出售装备"))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "返回"))
 	return join_lines(lines)
@@ -787,6 +795,9 @@ static func _forge_ready(player: PlayerCore, id: String) -> bool:
 # ---------- 码头 / 传送 ----------
 
 static func teleport_page(player: PlayerCore) -> String:
+	# 契约 trade-spec §6：world.json 就位后按大世界实况呈现（区域/10 港/当前所在）
+	if not GameData.world_ports.is_empty():
+		return _teleport_page_world(player)
 	var lines: Array[String] = []
 	lines.append(header("地中海传送"))
 	lines.append("[b]航线区域：[/b]%s" % SEP.join(PackedStringArray(GameData.regions)))
@@ -798,6 +809,127 @@ static func teleport_page(player: PlayerCore) -> String:
 			lines.append("▉%s" % link("tp:%d" % i, "%s(%d银)" % [port, Rules.teleport_cost_silver()]))
 	lines.append("")
 	lines.append("[center]%s[/center]" % link("back_game", "返回码头"))
+	return join_lines(lines)
+
+
+## 大世界传送页：区域行按 world 实际区域呈现；全部港口列表，当前港不可选
+static func _teleport_page_world(player: PlayerCore) -> String:
+	var current := Trade.port_at(player.location)
+	var region_seen: Array[String] = []
+	for p: Dictionary in GameData.world_ports:
+		var region := String(p.get("region", ""))
+		if region != "" and not region_seen.has(region):
+			region_seen.append(region)
+	var lines: Array[String] = []
+	lines.append(header("航海传送"))
+	lines.append("[b]航线区域：[/b]%s" % SEP.join(PackedStringArray(region_seen)))
+	for i in GameData.world_ports.size():
+		var p: Dictionary = GameData.world_ports[i]
+		var port_name := String(p.get("name", p.get("id", "")))
+		if String(p.get("id", "")) == current:
+			lines.append("▉%s（当前所在）" % esc(port_name))
+		else:
+			lines.append("▉%s" % link("tp:%d" % i, "%s(%d银)" % [port_name, Rules.teleport_cost_silver()]))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "返回码头"))
+	return join_lines(lines)
+
+
+## 传送到达提示页（契约 §6：成功 → goto 该港场景 + 船票提示）
+static func tp_arrival_page(port_name: String, cost_copper: int) -> String:
+	var lines: Array[String] = []
+	lines.append(header("%s · 码头" % port_name))
+	lines.append("船票花去 %d 铜贝。" % cost_copper)
+	lines.append("船老板：到了，%s到了！下船当心脚滑，码头上小心扒手。" % port_name)
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("back_game", "上岸"))
+	return join_lines(lines)
+
+
+# ---------- 航海贸易（契约 trade-spec §4-§5） ----------
+
+## 港口行会市场：全部 12 贸易品本地价 + 🔥抢手标记 + 买卖档位
+static func trade_market_page(player: PlayerCore, port_id: String, notice: String = "") -> String:
+	var port_display := Trade.port_name(port_id)
+	if port_display == port_id:
+		port_display = String(GameData.get_scene(player.location).get("name", port_id))
+	var region := String(Trade.port_def(port_id).get("region", "外海"))
+	var day := player.current_day()
+	var lines: Array[String] = []
+	lines.append(header("%s · 商行" % port_display))
+	lines.append("地区：%s　随身铜贝：%d" % [esc(region), player.copper])
+	if notice != "":
+		lines.append(esc(notice))
+	lines.append("商人：产地便宜、抢手地价高，看什么看，看货！")
+	for gid: String in Trade.trade_goods():
+		var def := GameData.get_item(gid)
+		var hot_mark := " [color=#ff5030]🔥抢手[/color]" if Trade.is_hot(gid, port_id, day) else ""
+		lines.append("▉%s %d铜贝/箱%s" % [esc(String(def.get("name", gid))), Trade.price(gid, port_id, day), hot_mark])
+		var buys: Array[String] = []
+		var sells: Array[String] = []
+		for tier in Trade.tiers_for(gid):
+			buys.append(link("trade_buy:%s:%d" % [gid, int(tier)], "买%d箱" % int(tier)))
+			sells.append(link("trade_sell:%s:%d" % [gid, int(tier)], "卖%d箱" % int(tier)))
+		sells.append(link("trade_sell:%s:all" % gid, "全部卖出"))
+		lines.append("　买：%s" % SEP.join(PackedStringArray(buys)))
+		lines.append("　卖：%s" % SEP.join(PackedStringArray(sells)))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("goto:%s" % player.location, "返回港口"))
+	return join_lines(lines)
+
+
+## 酒保情报页：花铜板打听当日行情（rumor 链接；不买也有返回）
+static func tavern_rumor_page(player: PlayerCore, port_id: String, notice: String = "") -> String:
+	var port_display := Trade.port_name(port_id)
+	if port_display == port_id:
+		port_display = String(GameData.get_scene(player.location).get("name", port_id))
+	var lines: Array[String] = []
+	lines.append(header("%s · 酒保" % port_display))
+	if notice != "":
+		lines.append(esc(notice))
+	lines.append("酒保：花 %d 铜，听我讲讲最近的行情。哪个港在抢什么货，我这儿门儿清。" % Rules.rumor_cost())
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("rumor", "打听小道消息(%d铜)" % Rules.rumor_cost()))
+	lines.append("")
+	lines.append("[center]%s[/center]" % link("goto:%s" % player.location, "返回港口"))
+	return join_lines(lines)
+
+
+## 酒保情报结果页（情报必真：同 day 的 is_hot）
+static func tavern_rumor_result(player: PlayerCore, rumor_lines: Array[String]) -> String:
+	var lines: Array[String] = []
+	lines.append(header("酒保 · 情报"))
+	for line in rumor_lines:
+		lines.append(esc(line))
+	lines.append("铜贝：%d" % player.copper)
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("rumor", "再打听一条(%d铜)" % Rules.rumor_cost()), link("goto:%s" % player.location, "返回港口")])
+	return join_lines(lines)
+
+
+# ---------- 铁匠装备回收（契约 trade-spec §7） ----------
+
+## 出售装备页：全部装备实例（名称/耐久/回收价=round(price×40%)），sell_equip:<idx>
+static func sell_equip_page(player: PlayerCore) -> String:
+	var lines: Array[String] = []
+	lines.append(header("铁匠铺 · 出售装备"))
+	lines.append("铁匠：压箱底的旧家伙也值几个钱，拿来我按成色回收。")
+	if player.equips.is_empty():
+		lines.append(dim("你身上一件装备都没有。"))
+	for i in player.equips.size():
+		var inst := player.equips[i]
+		var id := String(inst.get("id", ""))
+		var def := GameData.get_item(id)
+		var max_dur := maxi(int(def.get("durability", 1)), 1)
+		var sell := Rules.equip_sell_price(int(def.get("price", 0)))
+		var marker := "（手持）" if i == player.hand else ""
+		lines.append("▉%s%s 耐久%d/%d 回收%d铜贝  %s" % [
+			esc(player.item_name(id)), marker, int(inst.get("dur", 0)), max_dur, sell,
+			link("sell_equip:%d" % i, "[出售]"),
+		])
+	lines.append("铜贝：%d" % player.copper)
+	lines.append("")
+	lines.append("[center]%s   %s[/center]" % [link("smith", "返回铁匠铺"), link("back_game", "返回游戏")])
 	return join_lines(lines)
 
 

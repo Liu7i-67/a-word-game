@@ -12,6 +12,9 @@ static var ports: PackedStringArray = []
 static var regions: PackedStringArray = []
 static var active_region: String = ""
 static var city_map_name: String = "城内地图"
+## 大世界港口（契约 docs/trade-spec.md §2，data/world.json）：[{id,name,region,scene,specialties,demand_pool}]
+## 属增量数据：world.json 缺失时保持空数组，各系统自行兜底。
+static var world_ports: Array[Dictionary] = []
 
 const _DATA_DIR := "res://data/"
 
@@ -22,7 +25,17 @@ static func load_all() -> void:
 	items = _read_json("items.json").get("items", {})
 	monsters = _read_json("monsters.json").get("monsters", {})
 	var scenes_doc := _read_json("scenes.json")
+	world_ports = []
+	for entry in _read_json_optional("world.json").get("ports", []):
+		if entry is Dictionary:
+			world_ports.append(entry)
 	ports = PackedStringArray(scenes_doc.get("ports", []))
+	if ports.is_empty() and not world_ports.is_empty():
+		# scenes.json 未再提供港口名清单时，从 world.json 推导，保持旧接口可用
+		var names := PackedStringArray()
+		for p: Dictionary in world_ports:
+			names.append(String(p.get("name", p.get("id", ""))))
+		ports = names
 	regions = PackedStringArray(scenes_doc.get("regions", []))
 	active_region = String(scenes_doc.get("active_region", ""))
 	city_map_name = String(scenes_doc.get("city_map_name", "城内地图"))
@@ -93,3 +106,10 @@ static func _read_json(file_name: String) -> Dictionary:
 		return parsed
 	push_error("GameData: JSON 结构非法 %s" % file_name)
 	return {}
+
+
+## 增量数据读取（world.json 等）：并行写入/尚未落盘时静默返回空，不刷错误
+static func _read_json_optional(file_name: String) -> Dictionary:
+	if not FileAccess.file_exists(_DATA_DIR + file_name):
+		return {}
+	return _read_json(file_name)

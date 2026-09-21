@@ -1,5 +1,5 @@
 {
-  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。本轮增补(扩展契约§3.4)：economy.repair_cost_per_point=铁匠修理单价；combat.dungeon_*=地宫挑战(击杀目标/时限/通关奖励)。",
+  "_doc": "全局数值表。来源标注：文档✅=《游戏设计机制.md》可核对事实；🔍=文档缺失(§14)，按合理推断补全。调数值只改本文件。本轮增补(扩展契约§3.4)：economy.repair_cost_per_point=铁匠修理单价；combat.dungeon_*=地宫挑战(击杀目标/时限/通关奖励)。本轮增补(贸易契约§1-§7)：trade.*=港口定价(特产折扣85%/热门倍率180%/每港每日热门2个)；teleport.cost_copper=跨港传送船票铜贝价(文案仍写10银，cost_silver仅作展示)；economy.rumor_cost=酒保打听行情一次的价钱；economy.equip_sell_ratio_pct=装备回收购价为基准价的百分比。",
   "start": {
     "scene": "zaugun",
     "level": 1,
@@ -44,10 +44,18 @@
     "casino_bet": 200,
     "casino_win": 1000,
     "sell_ratio_pct": 50,
-    "repair_cost_per_point": 2
+    "repair_cost_per_point": 2,
+    "rumor_cost": 20,
+    "equip_sell_ratio_pct": 40
   },
   "teleport": {
-    "cost_silver": 10
+    "cost_silver": 10,
+    "cost_copper": 1000
+  },
+  "trade": {
+    "specialty_discount_pct": 85,
+    "hot_multiplier_pct": 180,
+    "hot_per_port": 2
   },
   "ui": {
     "click_cooldown_ms": 250,

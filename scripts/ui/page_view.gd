@@ -15,6 +15,10 @@ func _init() -> void:
 	scroll_active = false
 	context_menu_enabled = false
 	focus_mode = Control.FOCUS_NONE
+	# 触摸滚动修复点（契约 docs/trade-spec.md §8）：默认 STOP 会吞掉触摸拖动，
+	# 改为 PASS 让拖动事件穿透到外层 ScrollContainer；[url] 点击仍走 meta_clicked。
+	# 无真机验证，最终以用户真机滚动表现为准。
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_theme_font_size_override("normal_font_size", 26)
 	add_theme_font_size_override("bold_font_size", 29)

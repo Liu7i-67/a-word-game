@@ -16,6 +16,7 @@ var _hp_text: Label
 var _copper_label: Label
 var _toast: Label
 var _toast_tween: Tween
+var _safe_frame: SafeAreaFrame
 var _last_click_ms := -1000000
 
 
@@ -36,13 +37,19 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
+	# 安全区框占满全屏：内容随它的 insets 避开刘海/挖孔与手势导航条，
+	# 设计边距仍保留在原 margin 上（桌面无刘海时 insets=0，布局零变化）
+	_safe_frame = SafeAreaFrame.new()
+	_safe_frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_safe_frame)
+
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 28)
 	margin.add_theme_constant_override("margin_right", 28)
 	margin.add_theme_constant_override("margin_top", 24)
 	margin.add_theme_constant_override("margin_bottom", 28)
-	add_child(margin)
+	_safe_frame.add_child(margin)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 18)
@@ -98,17 +105,30 @@ func _build_ui() -> void:
 	_scroll = ScrollContainer.new()
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	# 触摸滚动修复点（契约 docs/trade-spec.md §8）：隐藏滚动条但保留触摸拖动滚动
+	#（市场货单等长页面移动端可拖动浏览）；真机效果待用户验证
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	vbox.add_child(_scroll)
 	_view = PageView.new()
 	_scroll.add_child(_view)
 	_view.link_activated.connect(_on_link)
 
-	# 轻提示（点击太快了 / 存档已保存）
+	# 轻提示（点击太快了 / 存档已保存）。SafeAreaFrame 是容器会接管子节点布局，
+	# 因此 toast 挂在它下面的整幅普通 Control 上：锚点定位保持原视觉位置，
+	# 但相对的是已扣除安全区的区域，底部不再被虚拟导航栏盖住。
+	var toast_holder := Control.new()
+	toast_holder.set_anchors_preset(Control.PRESET_FULL_RECT)
+	toast_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_safe_frame.add_child(toast_holder)
+
 	_toast = Label.new()
 	_toast.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_toast.anchor_left = 0.5
 	_toast.anchor_right = 0.5
 	_toast.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	# 垂直方向必须显式上生长：默认 END 会把文字向下排到安全区外（桌面甚至出屏）
+	_toast.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_toast.offset_top = -56
 	_toast.offset_bottom = -56
 	_toast.add_theme_font_size_override("font_size", 22)
 	_toast.add_theme_color_override("font_color", Color(1, 1, 1))
@@ -116,7 +136,7 @@ func _build_ui() -> void:
 	_toast.add_theme_constant_override("outline_size", 8)
 	_toast.modulate.a = 0.0
 	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_toast)
+	toast_holder.add_child(_toast)
 
 	_refresh_topbar()
 

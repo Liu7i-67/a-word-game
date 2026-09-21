@@ -558,6 +558,123 @@
         {"dir": "北", "to": "hauwaan"}
       ],
       "npcs": []
+    },
+    {
+      "id": "risiben",
+      "name": "里斯本港口",
+      "short": "里斯本港",
+      "on_map": false,
+      "desc": "特茹河口的咸风裹着鱼干与酒香，石板码头上海鸥争抢着渔获。",
+      "exits": [],
+      "npcs": [
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
+        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+      ]
+    },
+    {
+      "id": "masa",
+      "name": "马赛港口",
+      "short": "马赛港",
+      "on_map": false,
+      "desc": "旧港帆影层叠，采石场的凿声与调香坊的花香一道飘上崖顶。",
+      "exits": [],
+      "npcs": [
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
+        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+      ]
+    },
+    {
+      "id": "tunisi",
+      "name": "突尼斯港口",
+      "short": "突尼斯港",
+      "on_map": false,
+      "desc": "白墙集市里香料堆成小山，驼铃声从沙漠尽头一直响到码头。",
+      "exits": [],
+      "npcs": [
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
+        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+      ]
+    },
+    {
+      "id": "yalishanda",
+      "name": "亚历山大港口",
+      "short": "亚历山大港",
+      "on_map": false,
+      "desc": "灯塔余晖下莎草纸捆成垛，学者与商贩在同一片海风里讨价还价。",
+      "exits": [],
+      "npcs": [
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
+        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+      ]
+    },
+    {
+      "id": "yadian",
+      "name": "雅典港口",
+      "short": "雅典港",
+      "on_map": false,
+      "desc": "断柱之间晾着刚出窑的陶器，哲人后裔守着摊位慢悠悠地吆喝。",
+      "exits": [],
+      "npcs": [
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
+        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+      ]
+    },
+    {
+      "id": "yisitanbao",
+      "name": "伊斯坦堡港口",
+      "short": "伊斯坦堡港",
+      "on_map": false,
+      "desc": "海峡之上船来船往，驼队卸下的丝绸在拱廊下泛着水一样的光。",
+      "exits": [],
+      "npcs": [
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
+        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+      ]
+    },
+    {
+      "id": "yisitanbuer",
+      "name": "伊斯坦布尔港口",
+      "short": "伊斯坦布尔港",
+      "on_map": false,
+      "desc": "金角湾桅樯如林，成捆的皮货与成串的鱼干隔着海峡都能望见。",
+      "exits": [],
+      "npcs": [
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
+        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+      ]
+    },
+    {
+      "id": "aerjier",
+      "name": "阿尔及尔港口",
+      "short": "阿尔及尔港",
+      "on_map": false,
+      "desc": "白色阶地城俯瞰港湾，毛皮贩子与盐商在椰枣树影下掐着价。",
+      "exits": [],
+      "npcs": [
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
+        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+      ]
+    },
+    {
+      "id": "laguzha",
+      "name": "拉古扎港口",
+      "short": "拉古扎港",
+      "on_map": false,
+      "desc": "红顶小城依山傍海，盐田里晒出的白盐正是全城商路的底气。",
+      "exits": [],
+      "npcs": [
+        {"id": "teleporter", "name": "传送", "kind": "teleport"},
+        {"id": "barkeep", "name": "酒保", "kind": "tavern_rumor"},
+        {"id": "merchant", "name": "商人", "kind": "trade_market"}
+      ]
     }
   ]
 }

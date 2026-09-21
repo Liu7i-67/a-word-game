@@ -1,5 +1,5 @@
 {
-  "_doc": "物品/装备表。华丽弯刀数据为文档✅；小金丝藤仅知名称与暴率✅，属性为🔍推断补全；商品价格✅(26/31铜贝)，卖价为买入价50%(经济规范：买卖价差防无限套利)。本轮按扩展契约§3增补：16种材料(只卖不买，buy=2×sell)、3种药品(type=drug)、7把武器(武器掉落2把+打造5把，atk=[9+5(W-1),22+8(W-1)])。",
+  "_doc": "物品/装备表。华丽弯刀数据为文档✅；小金丝藤仅知名称与暴率✅，属性为🔍推断补全；商品价格✅(26/31铜贝)。卖价规则（主进程裁决）：贸易品（world.json 各港引用集合）由 Trade 引擎按港定价；非贸易 goods 的 sell_price 字段=固定回收价（材料 buy=2×sell 沿用扩展契约§3）；其余兜底为买价50%。装备 price=铁匠回炉基准价，回收价=price×economy.equip_sell_ratio_pct。",
   "items": {
     "hualiwandao1": {
       "name": "华丽弯刀（1级）",
@@ -11,6 +11,7 @@
       "weight": 1,
       "atk": [9, 22],
       "durability": 350,
+      "price": 800,
       "stack": 1
     },
     "xiaojinsiteng": {
@@ -23,6 +24,7 @@
       "weight": 1,
       "atk": [4, 10],
       "durability": 200,
+      "price": 150,
       "stack": 1
     },
     "putaojiu": {
@@ -32,7 +34,6 @@
       "weight": 0,
       "stack": 9999,
       "buy_price": 26,
-      "sell_price": 13,
       "tiers": [900, 450, 225]
     },
     "ganyouyou": {
@@ -42,8 +43,97 @@
       "weight": 0,
       "stack": 9999,
       "buy_price": 31,
-      "sell_price": 15,
       "tiers": [900, 450, 225]
+    },
+    "haiyan": {
+      "name": "海盐",
+      "type": "goods",
+      "desc": "拉古扎盐田晒出的粗海盐，白花花一袋，是厨房与腌坊的命根子。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 45,
+      "tiers": [900, 450, 225]
+    },
+    "taoqi": {
+      "name": "陶器",
+      "type": "goods",
+      "desc": "雅典窑口烧出的陶器，釉色温润，装油盛酒样样在行。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 60,
+      "tiers": [300, 150, 50]
+    },
+    "xianyu": {
+      "name": "鳕鱼干",
+      "type": "goods",
+      "desc": "里斯本渔港风干的鳕鱼干，咸香耐存，是水手航程里的老伙计。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 70,
+      "tiers": [300, 150, 50]
+    },
+    "shacao": {
+      "name": "莎草纸",
+      "type": "goods",
+      "desc": "亚历山大出产的莎草纸，落墨流畅，学者与抄经人竞相求购。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 80,
+      "tiers": [300, 150, 50]
+    },
+    "botejiu": {
+      "name": "波特酒",
+      "type": "goods",
+      "desc": "里斯本窖藏的波特酒，醇厚甘甜，越是远航越是金贵。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 90,
+      "tiers": [300, 150, 50]
+    },
+    "maopi": {
+      "name": "毛皮",
+      "type": "goods",
+      "desc": "阿尔及尔商栈收来的毛皮，绒密油亮，北方港城争着出价。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 95,
+      "tiers": [300, 150, 50]
+    },
+    "dalishi": {
+      "name": "大理石",
+      "type": "goods",
+      "desc": "马赛采石场开出的大理石，纹理如云，雕刻师见了挪不动脚。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 110,
+      "tiers": [300, 150, 50]
+    },
+    "xiangliao": {
+      "name": "香料",
+      "type": "goods",
+      "desc": "突尼斯集市的香料，胡椒丁香辛香扑鼻，一小包能换半袋铜贝。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 140,
+      "tiers": [300, 150, 50]
+    },
+    "xiangshui": {
+      "name": "香水",
+      "type": "goods",
+      "desc": "马赛调香师手作的香水，一瓶难求，贵妇们闻香而至。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 260,
+      "tiers": [120, 60, 20]
+    },
+    "sichou": {
+      "name": "丝绸",
+      "type": "goods",
+      "desc": "伊斯坦堡驼队运来的丝绸，光滑如水，是地中海最耀眼的奢侈品。",
+      "weight": 0,
+      "stack": 9999,
+      "buy_price": 400,
+      "tiers": [120, 60, 20]
     },
     "emao": {
       "name": "鹅毛",
@@ -245,6 +335,7 @@
       "weight": 1,
       "atk": [14, 30],
       "durability": 250,
+      "price": 200,
       "stack": 1
     },
     "niupibian": {
@@ -257,6 +348,7 @@
       "weight": 1,
       "atk": [24, 46],
       "durability": 250,
+      "price": 500,
       "stack": 1,
       "forge": {"materials": {"niupi": 4}, "copper": 300}
     },
@@ -270,6 +362,7 @@
       "weight": 1,
       "atk": [34, 62],
       "durability": 300,
+      "price": 1200,
       "stack": 1,
       "forge": {"materials": {"tiekuangshi": 5}, "copper": 800}
     },
@@ -283,6 +376,7 @@
       "weight": 1,
       "atk": [44, 78],
       "durability": 300,
+      "price": 2600,
       "stack": 1,
       "forge": {"materials": {"eyupi": 3, "xuantie": 2}, "copper": 1800}
     },
@@ -296,6 +390,7 @@
       "weight": 1,
       "atk": [54, 94],
       "durability": 350,
+      "price": 4800,
       "stack": 1,
       "forge": {"materials": {"xuantie": 5}, "copper": 3200}
     },
@@ -309,6 +404,7 @@
       "weight": 1,
       "atk": [64, 110],
       "durability": 350,
+      "price": 7000,
       "stack": 1
     },
     "dahuandao": {
@@ -321,6 +417,7 @@
       "weight": 1,
       "atk": [79, 134],
       "durability": 400,
+      "price": 12000,
       "stack": 1,
       "forge": {"materials": {"shanzei_lingpai": 1, "xuantie": 3}, "copper": 6000}
     }
